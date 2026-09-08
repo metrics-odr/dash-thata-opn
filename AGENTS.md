@@ -9,13 +9,15 @@
 
 ## ✅ CHECKLIST DE NOVO CLIENTE (fazer em ordem)
 
-1. **`build/build.py` — constantes do topo:** `SPREADSHEET_ID`, `GID_CONVERSAS`
-   (fonte principal), `GID_LEADS` (legado, só contado), `GID_META`, `GID_SALES`,
-   `CLIENT_NAME`, `MAIN_PRODUCT`, `MAIN_PRODUCT_PREFIX`, `TAX_FACTOR`.
-2. **`build/build.py` — critério de MQL:** ajustar `is_medico()` e os aliases da
-   coluna de qualificação em `process()` ao cabeçalho da aba Conversas do cliente.
+1. **`build/build.py` — constantes do topo:** `SPREADSHEET_ID_META`/`SPREADSHEET_ID_LEADS`
+   (uma ou duas planilhas, conforme o cliente), `GID_META`, `GID_LEADS`,
+   `GID_AGENDAMENTOS`, `GID_SALES`, `CLIENT_NAME`, `MAIN_PRODUCT`,
+   `MAIN_PRODUCT_PREFIX`, `TAX_FACTOR`.
+2. **`build/build.py` — critério de MQL/Lead A:** ajustar `is_mql()`/`is_lead_a()`
+   e os aliases das colunas de qualificação em `read_leads()` ao cabeçalho real
+   da aba de leads do cliente.
 3. **`build/app.js`:** revisar os rótulos fixos `'MQLs (...)'` e o agrupamento de
-   "faixa"/especialidade (o critério de `build.py` não propaga sozinho a esses textos).
+   dimensão (bucket/prof) — o critério de `build.py` não propaga sozinho a esses textos.
 4. **`build/template.html`:** preencher `<title>` e o logo (`logo-main`/`logo-sub`).
 5. **`build/identidade-visual.css`:** cores, se o cliente tiver identidade própria.
 6. **`README.md` / `CLAUDE.md` / `SETUP-CRON.md`:** owner/repo do GitHub, URL do
