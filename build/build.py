@@ -235,6 +235,14 @@ def is_lead_a(v: str | None) -> bool:
     return norm(v) == "a"
 
 
+def is_mba_sale(v: str | None) -> bool:
+    """Filtro de produto em "Compradores": esta dash considera SÓ as vendas do
+    MBA (coluna "Produto" contendo "mba", case/acento-insensitive) — outras
+    ofertas na mesma aba (ex.: Sessão Estratégica, Sala Secreta) ficam de
+    fora do funil de vendas/faturamento (decisão do cliente)."""
+    return "mba" in norm(v)
+
+
 def is_reuniao_realizada(status: str | None) -> bool:
     """Sem confirmação dos valores exatos da coluna "Status" da aba
     Agendamentos — trata qualquer status que contenha "realiz" (normalizado,
@@ -465,23 +473,29 @@ def read_sales(sales_rows, phone_attrib, email_attrib):
     conversão pro toggle de moeda acontece no app.js (mesmo padrão do gasto
     do Meta Ads). Sem confirmação dos valores exatos de "Status" p/
     cancelamento/reembolso: conta TODA linha não vazia como venda
-    (comportamento conservador do template original)."""
+    (comportamento conservador do template original).
+    Esta dash considera SÓ as vendas do MBA: linhas cuja coluna "Produto" não
+    contém "mba" são ignoradas (decisão do cliente — ver is_mba_sale)."""
     header = sales_rows[0] if sales_rows else []
     idx = header_index(
         header,
         {"date": ["data"], "status": ["status"], "name": ["comprador"],
-         "email": ["e-mail", "email"], "phone": ["telefone"],
+         "email": ["e-mail", "email"], "phone": ["telefone"], "produto": ["produto"],
          "faturamento": ["fat. liquido (usd)", "fat liquido (usd)"]},
-        {"date": 0, "status": 2, "name": 5, "email": 6, "phone": 7, "faturamento": 12},
+        {"date": 0, "status": 2, "produto": 3, "name": 5, "email": 6, "phone": 7, "faturamento": 12},
     )
     NO_ATTRIB = {"src": "org", "camp": "(sem campanha)", "adset": "(sem conjunto)",
                  "ad": "(sem anúncio)", "d": None}
     out = []
     matched = 0
     total = 0
+    skipped_produto = 0
     unmatched_log = []
     for row in sales_rows[1:]:
         if not any((c or "").strip() for c in row):
+            continue
+        if not is_mba_sale(cell(row, idx["produto"])):
+            skipped_produto += 1
             continue
         total += 1
         phone = canon_phone(cell(row, idx["phone"]))
@@ -499,6 +513,7 @@ def read_sales(sales_rows, phone_attrib, email_attrib):
         })
     print(f"  vendas atribuídas a anúncio: {matched}/{total} (cruzamento telefone OU e-mail, Compradores × Central de Leads)",
           file=sys.stderr)
+    print(f"  vendas ignoradas por Produto != MBA: {skipped_produto}", file=sys.stderr)
     if unmatched_log:
         print(f"  {len(unmatched_log)} compra(s) SEM anúncio de origem (entram nos totais como \"(sem campanha)\"):",
               file=sys.stderr)
