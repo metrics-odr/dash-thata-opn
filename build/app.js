@@ -68,7 +68,10 @@ function derive(a){
     cpl:a.leads?g/a.leads:null, cpmql:a.mqls?g/a.mqls:null, tx:a.leads?a.mqls/a.leads:null,
     // Lead A: métrica PARALELA ao MQL (nunca substitui) — Tx‑A (Lead A/Leads),
     // CPL‑A (custo por Lead A) e A:MQL (proporção Lead A / MQL).
-    cpla:la?g/la:null, txa:a.leads?la/a.leads:null, amql:a.mqls?la/a.mqls:null};
+    cpla:la?g/la:null, txa:a.leads?la/a.leads:null, amql:a.mqls?la/a.mqls:null,
+    // HR (Hook Rate) = 3-Second Video Views / Impressions · BR (Body Rate) =
+    // Video Views 50% / Impressions (Top Anúncios, aba Relatório).
+    hr:a.im?(a.v3||0)/a.im:null, br:a.im?(a.v50||0)/a.im:null};
 }
 /* --------- FUNIL: MQL → Venda (Vendas/Faturamento já ligados via build.py) ---------
    Funil do cliente: Impressões → Cliques → Leads → MQLs → Vendas → Faturamento.
@@ -101,13 +104,13 @@ function salesOf(a){
     cac:          hasVd&&vendas?g/vendas:null,
     roas:         hasVd&&g?fat/g:null,
     tm:           hasVd&&vendas?fat/vendas:null,
-    convmql:      hasVd&&mqls?vendas/mqls:null,
+    convagd:      hasVd&&agendamentos?vendas/agendamentos:null,   // ConvAGD = Vendas / Agendamentos
   };
 }
 function buildAgg(fL,fM,fS,dim,fAg){
   const m={};
-  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,la:0,vendas:0,fat:0,agendamentos:0,reunioes:0});
-  fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
+  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,v3:0,v50:0,leads:0,mqls:0,la:0,vendas:0,fat:0,agendamentos:0,reunioes:0});
+  fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv; a.v3+=r.v3||0; a.v50+=r.v50||0;});
   fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q; a.la+=r.a||0;});
   fS.forEach(r=>{const a=get(r[dim]); a.vendas+=r.vendas||0; a.fat+=r.fat||0;});
   (fAg||[]).forEach(r=>{const a=get(r[dim]); a.agendamentos+=r.agendamentos||0; a.reunioes+=r.reunioes||0;});
@@ -171,16 +174,24 @@ function colWidth(cfg,c){ const saved=(STATE.colw[cfg.id]||{})[c.key];
   if(c.type==='date') return 96;
   if(c.type==='brl') return 110;   // "R$ 1.487,42" não cabia nos 92px padrão (cortava com "…")
   return 92; }
+/* colunas sticky (cfg.cols[i].stk === 'l'|'r'): posicionadas com position:sticky
+   DENTRO da mesma <table> (1 único container de scroll, nativo) — o offset
+   (left/right, em px) é a soma acumulada da largura das colunas sticky que vêm
+   antes dela (ver stkOffsets). Isso substitui o antigo esquema de 3 <table>
+   lado a lado (renderSplitTable): aquele motor sincronizava o scroll vertical
+   das 3 seções via listener de 'scroll' (evento assíncrono, 1 frame depois do
+   repaint), o que causava um "degrau" visível durante a rolagem mesmo as 3
+   seções terminando alinhadas. Com sticky nativo numa tabela só, não há nada
+   para sincronizar — o navegador cuida da posição em todos os frames. */
+function stkOffsets(cols, widths){
+  const leftIdx=[], rightIdx=[];
+  cols.forEach((c,i)=>{ if(c.stk==='l') leftIdx.push(i); else if(c.stk==='r') rightIdx.push(i); });
+  const leftOff={}, rightOff={};
+  let acc=0; leftIdx.forEach(i=>{ leftOff[i]=acc; acc+=widths[i]; });
+  acc=0; for(let j=rightIdx.length-1;j>=0;j--){ const i=rightIdx[j]; rightOff[i]=acc; acc+=widths[i]; }
+  return {leftOff, rightOff, lastLeft:leftIdx[leftIdx.length-1], firstRight:rightIdx[0]};
+}
 function renderTable(cfg){
-  // tabelas com colunas travadas EM BANDA (band:'l'/'r' — não confundir com o
-  // stk:'l1'/'r' do rel-adt, esquema à parte, só 1 coluna de cada lado) usam
-  // um motor separado — ver renderSplitTable — porque aqui há VÁRIAS colunas
-  // coladas de cada lado, e a soma delas pode superar a largura do card:
-  // position:sticky por célula nesse caso gruda as bandas por cima do miolo
-  // em vez de ao lado (o miolo fica permanentemente encoberto, sem posição
-  // de scroll que o revele). 3 <table> lado a lado, cada uma só do tamanho
-  // que precisa, não tem esse problema.
-  if(cfg.cols.some(c=>c.band)) return renderSplitTable(cfg);
   const table=document.getElementById(cfg.id); if(!table) return;
   table.classList.toggle('dt-center', !!cfg.center);   // Mar01: dados centralizados
   const fit=!!cfg.fit;                                  // fit: cabe 100% da largura, sem scroll
@@ -204,26 +215,31 @@ function renderTable(cfg){
   }).join('')+'</colgroup>';
   const esc=s=>String(s==null?'':s).replace(/"/g,'&quot;');
   const stkCls=c=>c.stk?' stk-'+c.stk:'';
+  const hasStk=cfg.cols.some(c=>c.stk);
+  let STK=hasStk?stkOffsets(cfg.cols, fit?cfg.cols.map(c=>c.w||100):widths):null;
+  const stkEdgeCls=(c,i)=> STK&&((c.stk==='l'&&i===STK.lastLeft)||(c.stk==='r'&&i===STK.firstRight)) ? ' stk-edge' : '';
+  const stkStyle=(c,i)=> !STK?'' : c.stk==='l'?`left:${STK.leftOff[i]}px;` : c.stk==='r'?`right:${STK.rightOff[i]}px;` : '';
   let thead='<thead><tr>'+cfg.cols.map((c,i)=>{
     const sc = sortState&&sortState.key===c.key ? (sortState.dir==='asc'?'sorted-asc':'sorted-desc') : '';
-    return `<th class="${c.type==='dim'?'dim ':''}${sc}${stkCls(c)}" data-k="${c.key}" data-ci="${i}" title="${esc(c.label)}">${c.label}${fit?'':'<span class="rsz"></span>'}</th>`;
+    return `<th class="${c.type==='dim'?'dim ':''}${sc}${stkCls(c)}${stkEdgeCls(c,i)}" data-k="${c.key}" data-ci="${i}" title="${esc(c.label)}" style="${stkStyle(c,i)}">${c.label}${fit?'':'<span class="rsz"></span>'}</th>`;
   }).join('')+'</tr></thead>';
   // title = valor SEMPRE completo (mesmo em fit, onde a célula pode abreviar/cortar) — passe o mouse p/ ver
   let tbody='<tbody>'+rows.map(r=>{
     const sel = cfg.selectable && cfg.selSet && cfg.selSet.has(r.k);
-    const tds=cfg.cols.map(c=>{
-      const v=r.cells[c.key]; let bg='';
-      if(c.heat && ext[c.key]) bg=`background:${heat(v,ext[c.key][0],ext[c.key][1],c.heat)}`;
-      const cls=(c.type==='dim'?'dim':'')+(c.cls&&c.cls(r)?' '+c.cls(r):'')+stkCls(c);
+    const tds=cfg.cols.map((c,i)=>{
+      const v=r.cells[c.key]; const style=[];
+      if(c.heat && ext[c.key]) style.push(`background:${heat(v,ext[c.key][0],ext[c.key][1],c.heat)}`);
+      const ss=stkStyle(c,i); if(ss) style.push(ss);
+      const cls=(c.type==='dim'?'dim':'')+(c.cls&&c.cls(r)?' '+c.cls(r):'')+stkCls(c)+stkEdgeCls(c,i);
       const ttl=c.type==='html'?'':` title="${esc(fmtStd(c.type,v))}"`;
-      return `<td class="${cls}" style="${bg}"${ttl}>${fmt(c.type,v)}</td>`;
+      return `<td class="${cls}" style="${style.join(';')}" data-ci="${i}"${ttl}>${fmt(c.type,v)}</td>`;
     }).join('');
     return `<tr class="${sel?'sel':''}" data-k="${encodeURIComponent(r.k)}">${tds}</tr>`;
   }).join('')+'</tbody>';
   let tfoot='';
   if(cfg.total){ tfoot='<tfoot><tr>'+cfg.cols.map((c,i)=>{
     const v=cfg.total[c.key]; const isFirst=i===0&&v==null;
-    return `<td class="${c.type==='dim'?'dim':''}${stkCls(c)}" title="${isFirst?'Total Geral':esc(fmtStd(c.type,v))}">${isFirst?'Total Geral':fmt(c.type,v)}</td>`;
+    return `<td class="${c.type==='dim'?'dim':''}${stkCls(c)}${stkEdgeCls(c,i)}" data-ci="${i}" style="${stkStyle(c,i)}" title="${isFirst?'Total Geral':esc(fmtStd(c.type,v))}">${isFirst?'Total Geral':fmt(c.type,v)}</td>`;
   }).join('')+'</tr></tfoot>'; }
   table.style.width=fit?'100%':totalW+'px';
   table.innerHTML=colgroup+thead+tbody+tfoot;
@@ -245,7 +261,10 @@ function renderTable(cfg){
       const w0=cols[ci].offsetWidth, tw0=table.offsetWidth;
       document.body.style.userSelect='none';
       const mv=ev=>{ const nw=Math.max(60,w0+(ev.clientX-x0)); cols[ci].style.width=nw+'px'; table.style.width=(tw0-w0+nw)+'px';
-        STATE.colw[cfg.id]=STATE.colw[cfg.id]||{}; STATE.colw[cfg.id][k]=nw; };
+        STATE.colw[cfg.id]=STATE.colw[cfg.id]||{}; STATE.colw[cfg.id][k]=nw;
+        if(hasStk){ widths[ci]=nw; STK=stkOffsets(cfg.cols,widths);
+          table.querySelectorAll('[data-ci]').forEach(el=>{ const i=+el.dataset.ci, cc=cfg.cols[i];
+            if(cc.stk==='l') el.style.left=STK.leftOff[i]+'px'; else if(cc.stk==='r') el.style.right=STK.rightOff[i]+'px'; }); } };
       const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); document.body.style.userSelect=''; localStorage.setItem('dm_colw',JSON.stringify(STATE.colw)); };
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
     });
@@ -268,182 +287,9 @@ function renderTable(cfg){
   // pra chips/cores customizados nunca sumirem ao clicar num cabeçalho)
   if(cfg.afterRender) cfg.afterRender(table, rows);
 }
-/* ---------------- tabela "split" (colunas travadas em banda) ----------------
-   3 <table> independentes lado a lado (esquerda fixa · meio com scroll
-   próprio · direita fixa). Cada seção rola VERTICALMENTE por conta própria
-   (max-height igual ao do .tbl-wrap ancestral + overflow-y:auto — ver CSS
-   .dt-split-fixed/.dt-split-scroll) e um listener de 'scroll' sincroniza as
-   3 (scrollTop) pra se comportarem como uma tabela só. Isso evita as 2
-   armadilhas de quando isso era 1 única faixa por posição:
-   1) cabeçalho "solto": se só o miolo tem overflow-x:auto, o CSS força
-      overflow-y a virar "auto" nele também (canonicalização do spec) —
-      mas como o miolo nunca chega a rolar de fato sozinho (cresce até
-      caber o conteúdo), ele vira um scroll container que nunca se move,
-      e o sticky do thead gruda relativo A ELE, não ao .tbl-wrap que
-      realmente rola — daí o cabeçalho "sobe" junto com o resto ao rolar.
-   2) banda cobrindo o miolo: position:sticky por célula numa única
-      <table> não sobra espaço pro miolo quando (banda esquerda + banda
-      direita) > largura do card — o miolo fica permanentemente atrás das
-      bandas, sem posição de scroll que o revele.
-   Cada seção rolando por si (bounded, overflow-y:auto de verdade) faz o
-   sticky nativo funcionar sem ressalva nenhuma, e cada uma só ocupa o
-   espaço que ela mesma precisa — cabendo tudo, o flex nem mostra barra de
-   rolagem e fica idêntico a uma tabela única. */
-function renderSplitTable(cfg){
-  const root=document.getElementById(cfg.id); if(!root) return;
-  const wrap=root.closest('.tbl-wrap');
-  const sortState=STATE.sort[cfg.id];
-  let rows=cfg.rows.slice();
-  if(sortState){ const {key,dir}=sortState; const c=cfg.cols.find(x=>x.key===key);
-    rows.sort((a,b)=>{ let va=a.cells[key], vb=b.cells[key];
-      if(c && c.type==='dim'){ va=norm(va); vb=norm(vb); return dir==='asc'?(va<vb?-1:va>vb?1:0):(va>vb?-1:va<vb?1:0); }
-      va=(va==null||!isFinite(va))?-Infinity:va; vb=(vb==null||!isFinite(vb))?-Infinity:vb;
-      return dir==='asc'?va-vb:vb-va; }); }
-  const ext={};
-  cfg.cols.forEach(c=>{ if(c.heat){ const vs=rows.map(r=>r.cells[c.key]).filter(v=>v!=null&&isFinite(v)); ext[c.key]=[Math.min(...vs),Math.max(...vs)]; }});
-  const fmt=(t,v)=> t==='brl'?brl(v):t==='pct'?pct(v):t==='int'?intf(v):t==='num'?numf(v):t==='date'?brdate(v):t==='html'?(v==null?'-':String(v)):dimf(v);
-  const esc=s=>String(s==null?'':s).replace(/"/g,'&quot;');
-  const leftCols=cfg.cols.filter(c=>c.band==='l'), rightCols=cfg.cols.filter(c=>c.band==='r'), midCols=cfg.cols.filter(c=>!c.band);
-  function section(cols){
-    const widths=cols.map(c=>colWidth(cfg,c)); const totalW=widths.reduce((a,b)=>a+b,0);
-    const colgroup='<colgroup>'+cols.map((c,i)=>`<col style="width:${widths[i]}px">`).join('')+'</colgroup>';
-    const thead='<thead><tr>'+cols.map(c=>{
-      const sc = sortState&&sortState.key===c.key ? (sortState.dir==='asc'?'sorted-asc':'sorted-desc') : '';
-      return `<th class="${c.type==='dim'?'dim ':''}${sc}" data-k="${c.key}" title="${esc(c.label)}">${c.label}<span class="rsz"></span></th>`;
-    }).join('')+'</tr></thead>';
-    const tbody='<tbody>'+rows.map(r=>{
-      const sel = cfg.selectable && cfg.selSet && cfg.selSet.has(r.k);
-      const tds=cols.map(c=>{
-        const v=r.cells[c.key]; let bg='';
-        if(c.heat && ext[c.key]) bg=`background:${heat(v,ext[c.key][0],ext[c.key][1],c.heat)}`;
-        const cls=(c.type==='dim'?'dim':'')+(c.cls&&c.cls(r)?' '+c.cls(r):'');
-        const ttl=c.type==='html'?'':` title="${esc(fmtStd(c.type,v))}"`;
-        return `<td class="${cls}" style="${bg}"${ttl}>${fmt(c.type,v)}</td>`;
-      }).join('');
-      return `<tr class="${sel?'sel':''}" data-k="${encodeURIComponent(r.k)}">${tds}</tr>`;
-    }).join('')+'</tbody>';
-    let tfoot='';
-    if(cfg.total){ tfoot='<tfoot><tr>'+cols.map(c=>{
-      const v=cfg.total[c.key]; const isFirst=cfg.cols.indexOf(c)===0&&v==null;
-      return `<td class="${c.type==='dim'?'dim':''}" title="${isFirst?'Total Geral':esc(fmtStd(c.type,v))}">${isFirst?'Total Geral':fmt(c.type,v)}</td>`;
-    }).join('')+'</tr></tfoot>'; }
-    return `<table class="dt${cfg.center?' dt-center':''}" style="width:${totalW}px">${colgroup}${thead}${tbody}${tfoot}</table>`;
-  }
-  // altura de cada seção = a mesma altura máxima do .tbl-wrap ancestral
-  // (tbl-normal/tbl-double/inline) — rolam juntas dentro do mesmo limite
-  // visual de sempre, sem precisar que o .tbl-wrap role por fora.
-  const maxH=wrap?parseFloat(getComputedStyle(wrap).maxHeight):NaN;
-  const hStyle=isFinite(maxH)?` style="max-height:${maxH}px"`:'';
-  // troca a própria tag por <div> (um <table> não pode ter <div> como filho —
-  // o parser HTML descarta; outerHTML recria o nó com a tag certa). Funciona
-  // tanto na 1ª renderização (raiz ainda é a <table> do template) quanto nas
-  // seguintes (raiz já é a <div class="dt-split"> da renderização anterior).
-  root.outerHTML =
-    `<div id="${cfg.id}" class="dt-split">`+
-      `<div class="dt-split-fixed dt-split-l"${hStyle}>${section(leftCols)}</div>`+
-      `<div class="dt-split-scroll"${hStyle}>${section(midCols)}</div>`+
-      `<div class="dt-split-fixed dt-split-r"${hStyle}>${section(rightCols)}</div>`+
-    `</div>`;
-  const fresh=document.getElementById(cfg.id);
-  // A seção do meio é a única com barra de rolagem HORIZONTAL; essa barra come
-  // altura do scrollport dela (clientHeight menor). Se as seções fixas ficarem
-  // com o mesmo max-height, o rodapé sticky ("Total Geral") delas fica ~7px mais
-  // baixo que o do meio e o scroll vertical delas anda um pouco mais — as linhas
-  // saem de sincronia (o "degrau"). Descontamos a altura da barra das seções
-  // fixas p/ os 3 scrollports terem exatamente a mesma altura útil.
-  (function alignScrollports(){
-    const mid=fresh.querySelector('.dt-split-scroll'); if(!mid) return;
-    const sb=mid.offsetHeight-mid.clientHeight;   // altura da barra horizontal (0 se não houver)
-    if(!(sb>0) || !isFinite(maxH)) return;
-    fresh.querySelectorAll('.dt-split-fixed').forEach(el=>{ el.style.maxHeight=(maxH-sb)+'px'; });
-  })();
-  // hover sincronizado: passar o mouse em QUALQUER seção (esquerda/meio/direita)
-  // acende a linha correspondente (mesmo índice) nas 3 — senão o :hover nativo
-  // só pega a seção sob o cursor, e visualmente parece que só um pedaço da
-  // linha "existe" (ver CSS .dt-split table.dt tbody tr:hover desativado).
-  const bodyRows=['.dt-split-l','.dt-split-scroll','.dt-split-r'].map(sel=>{
-    const t=fresh.querySelector(sel+' table.dt'); return t?[...t.querySelectorAll('tbody tr')]:[];
-  });
-  // trava de segurança do alinhamento: mesmo com a altura fixa do CSS, qualquer
-  // diferença de fração de pixel entre as seções (fonte diferente por SO, zoom
-  // do navegador) acumularia linha a linha e viraria "degrau". Aqui a altura
-  // REAL de cada linha é medida nas 3 seções e a maior (arredondada p/ cima,
-  // em pixel inteiro) é aplicada às 3 — as bordas ficam sempre na mesma altura.
-  (function lockRowHeights(){
-    const secs=bodyRows.filter(a=>a.length);
-    if(secs.length<2) return;
-    const n=Math.min(...secs.map(a=>a.length));
-    const hs=[]; for(let i=0;i<n;i++) hs.push(Math.ceil(Math.max(...secs.map(a=>a[i].getBoundingClientRect().height))));
-    for(let i=0;i<n;i++) secs.forEach(a=>{ a[i].style.height=hs[i]+'px'; });
-    // mesma trava p/ cabeçalho e rodapé (se um for 1px mais alto, TODAS as
-    // linhas daquela seção descem junto e a tabela inteira sai de sincronia)
-    ['thead tr','tfoot tr'].forEach(sel=>{
-      const els=[...fresh.querySelectorAll('.dt-split-l '+sel+', .dt-split-scroll '+sel+', .dt-split-r '+sel)]
-        .filter(tr=>tr.children.length);
-      if(els.length<2) return;
-      const h=Math.ceil(Math.max(...els.map(tr=>tr.getBoundingClientRect().height)));
-      els.forEach(tr=>{ tr.style.height=h+'px'; });
-    });
-  })();
-  rows.forEach((r,i)=>{
-    const trio=bodyRows.map(trs=>trs[i]).filter(Boolean);
-    trio.forEach(tr=>{
-      tr.addEventListener('mouseenter',()=>trio.forEach(t=>t.classList.add('hover-row')));
-      tr.addEventListener('mouseleave',()=>trio.forEach(t=>t.classList.remove('hover-row')));
-    });
-  });
-  // as 3 seções rolam verticalmente cada uma por conta própria (CSS acima) —
-  // sincroniza scrollTop entre elas pra se comportarem como 1 tabela só,
-  // não importa sobre qual seção o mouse rolou.
-  const secs=[...fresh.querySelectorAll('.dt-split-l, .dt-split-scroll, .dt-split-r')];
-  let syncing=false;
-  secs.forEach(el=>el.addEventListener('scroll',()=>{
-    if(syncing) return; syncing=true;
-    secs.forEach(o=>{ if(o!==el) o.scrollTop=el.scrollTop; });
-    requestAnimationFrame(()=>{ syncing=false; });
-  }));
-  // sort: clicar em QUALQUER cabeçalho (das 3 tabelas) reordena as 3 juntas
-  fresh.querySelectorAll('thead th').forEach(th=>{
-    th.addEventListener('click',e=>{ if(e.target.classList.contains('rsz'))return;
-      const k=th.dataset.k, cur=STATE.sort[cfg.id];
-      if(!cur||cur.key!==k) STATE.sort[cfg.id]={key:k,dir:'asc'};
-      else if(cur.dir==='asc') STATE.sort[cfg.id]={key:k,dir:'desc'};
-      else delete STATE.sort[cfg.id];
-      renderSplitTable(cfg);
-    });
-  });
-  // resize: cada coluna só afeta a largura da SUA seção (as 3 tabelas são
-  // independentes, então redimensionar ao vivo não desalinha nada)
-  fresh.querySelectorAll('thead th .rsz').forEach(g=>{
-    g.addEventListener('mousedown',e=>{ e.preventDefault(); e.stopPropagation();
-      const th=g.parentElement, k=th.dataset.k, x0=e.clientX;
-      const sectionTable=th.closest('table'), ths=[...th.parentElement.children];
-      const ci=ths.indexOf(th), col=sectionTable.querySelector('colgroup').children[ci];
-      const w0=col.offsetWidth, tw0=sectionTable.offsetWidth;
-      document.body.style.userSelect='none';
-      const mv=ev=>{ const nw=Math.max(60,w0+(ev.clientX-x0)); col.style.width=nw+'px'; sectionTable.style.width=(tw0-w0+nw)+'px';
-        STATE.colw[cfg.id]=STATE.colw[cfg.id]||{}; STATE.colw[cfg.id][k]=nw; };
-      const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); document.body.style.userSelect=''; localStorage.setItem('dm_colw',JSON.stringify(STATE.colw)); };
-      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
-    });
-    g.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation();
-      const th=g.parentElement, k=th.dataset.k, c=cfg.cols.find(x=>x.key===k);
-      const nw=autoColWidth(cfg,c);
-      STATE.colw[cfg.id]=STATE.colw[cfg.id]||{}; STATE.colw[cfg.id][k]=nw;
-      localStorage.setItem('dm_colw',JSON.stringify(STATE.colw));
-      renderSplitTable(cfg);
-    });
-  });
-  if(cfg.selectable && cfg.onSelect){
-    fresh.querySelectorAll('tbody tr').forEach(tr=>{
-      tr.addEventListener('click',e=>{ cfg.onSelect(decodeURIComponent(tr.dataset.k), e); });
-    });
-  }
-  if(cfg.afterRender) cfg.afterRender(fresh, rows);
-}
 /* Heatmap por coluna: cor FIXA por métrica (definida em identidade-visual.css),
    só a OPACIDADE varia com o valor (maior valor = mais vibrante). */
-const HEAT_HUE={gasto:'--heat-gasto', leads:'--heat-leads', mqls:'--heat-mqls', roas:'--heat-roas', vendas:'--heat-vendas'};
+const HEAT_HUE={gasto:'--heat-gasto', leads:'--heat-leads', mqls:'--heat-mqls', roas:'--heat-roas', vendas:'--heat-vendas', la:'--heat-la', cpla:'--heat-cpla'};
 function heat(v,lo,hi,kind){
   if(v==null||!isFinite(v)||hi===lo||!HEAT_HUE[kind]) return 'transparent';
   const t=Math.max(0,Math.min(1,(v-lo)/(hi-lo)));
@@ -622,7 +468,7 @@ function renderGeralCore(ids){
     ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
-    ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvMQL',s.convmql!=null?pct(s.convmql):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
+    ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvAGD',s.convagd!=null?pct(s.convagd):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
     ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
   ];
   document.getElementById(ids.funnel).innerHTML=funnelHTML(steps);
@@ -680,6 +526,7 @@ function renderGeralCore(ids){
    Espelha a Visão Geral (renderGeralCore com IDs próprios) e, abaixo, acrescenta
    Top Anúncios · Piores Anúncios · Briefing do Gestor. */
 const AD_LINKS = DATA.ad_links || {};
+const AD_STATUS = DATA.ad_status || {};
 const SAMPLE_MIN_SPEND = (B.sample_min_spend!=null?B.sample_min_spend:100);
 const SAMPLE_MIN_MQLS  = (B.sample_min_mqls!=null?B.sample_min_mqls:3);
 const escHtml=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -715,6 +562,19 @@ function metaColorClass(v, meta){
 
 function adLinkCell(name){ const u=AD_LINKS[name];
   return u?`<a class="rel-adlink" href="${escHtml(u)}" target="_blank" rel="noopener">Abrir ▸</a>`:'<span class="rel-adlink off">—</span>'; }
+
+/* status ATIVO/PAUSADO do anúncio no Meta Ads (coluna "Ad Status" da
+   planilha) — usado na tabela "Anúncios" (Captura Meta Ads), separado do
+   status de performance (Escalar/Manter/Observar/Cortar) do Relatório. */
+function adStatusBadge(name){
+  const st=norm(AD_STATUS[name]||'');
+  if(!st) return '<span class="na-tag">—</span>';
+  const active=st==='active';
+  return `<span class="ad-status ${active?'on':'off'}">${active?'Ativo':'Pausado'}</span>`;
+}
+/* "Prévia": ícone de olho (sem texto) linkando o criativo no Instagram. */
+function adPreviewCell(name){ const u=AD_LINKS[name];
+  return u?`<a class="ad-preview" href="${escHtml(u)}" target="_blank" rel="noopener" title="Ver anúncio">👁</a>`:'<span class="ad-preview off">—</span>'; }
 
 /* ad -> (campanha, conjunto) dominantes por gasto no Meta (fallback: lead).
    Um anúncio pode rodar em mais de uma campanha/conjunto; fica com a combinação
@@ -759,38 +619,50 @@ function cmpBest(a,b){ const qa=adQuality(a), qb=adQuality(b);   // <0 => a ante
    Anúncio/Status ficam FIXOS à esquerda e Link FIXO à direita (position:sticky
    em .rel-adt), então dão pra ver sem rolar lateralmente — só as métricas do
    meio rolam. Larguras em px casam com o CSS (.rel-adt .stk-*). */
-const AD_COLS=[
-  {k:'ad',label:'Anúncio',dim:true,stk:'l1'},{k:'status',label:'Status',dim:true,stk:'l2'},
-  {k:'camp',label:'Campanha',dim:true},{k:'adset',label:'Conjunto',dim:true},
-  {k:'gasto',label:'Gasto'},{k:'im',label:'Impr.'},{k:'cpm',label:'CPM'},{k:'ctr',label:'CTR'},
-  {k:'leads',label:'Leads'},{k:'cpl',label:'CPL'},{k:'mqls',label:'MQLs'},{k:'tx',label:'Tx‑MQL'},{k:'cpmql',label:'CPMQL'},
-  {k:'convmql',label:'ConvMQL'},{k:'vendas',label:'Vendas'},{k:'cac',label:'CAC'},{k:'fat',label:'Faturamento'},{k:'roas',label:'ROAS'},
-  {k:'link',label:'Link',dim:true,stk:'r'},
-];
 function adRowCells(ad,a,struct){
   const d=derive(a), s=salesOf(a);
   return {ad, camp:struct.camp, adset:struct.adset,
-    gasto:d.gasto, im:a.im, cpm:d.cpm, ctr:d.ctr,
+    gasto:d.gasto, hr:d.hr, br:d.br, ctr:d.ctr,
     leads:a.leads, cpl:d.cpl, mqls:a.mqls, tx:d.tx, cpmql:d.cpmql,
     la:d.la, txa:d.txa, amql:d.amql, cpla:d.cpla,
-    convmql:s.convmql, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas,
+    convagd:s.convagd, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas,
     link:adLinkCell(ad),
     _cpmql:d.cpmql, _cac:s.cac, status:null};   // valores crus p/ colorir vs meta
 }
-const statusChip=obs=>obs?'<span class="rel-chip c-yellow">Em observação</span>':'<span class="rel-chip c-green">Avaliável</span>';
+/* status do anúncio (Top Anúncios) vs. metas de CPMQL/CAC do painel — usa o
+   resultado mais profundo disponível (CAC quando já há venda, senão CPMQL).
+   Sem amostra relevante => "Observar"; com amostra, a cor de metaColorClass
+   (verde/amarelo/vermelho vs meta) mapeia para Escalar/Manter/Cortar; sem
+   meta definida (metaColorClass vazio) fica "Manter" (neutro). */
+function adStatusState(a){
+  if(!adSampleOk(a)) return 'observar';
+  const s=salesOf(a), d=derive(a);
+  const useCac = s.vendas!=null;
+  const mc = metaColorClass(useCac?s.cac:d.cpmql, useCac?METAS.cac:METAS.cpmql);
+  if(mc==='mc-green') return 'escalar';
+  if(mc==='mc-red') return 'cortar';
+  return 'manter';
+}
+const STATUS_CHIP={
+  escalar:'<span class="rel-chip c-green">Escalar</span>',
+  manter:'<span class="rel-chip c-blue">Manter</span>',
+  observar:'<span class="rel-chip c-yellow">Observar</span>',
+  cortar:'<span class="rel-chip c-red">Cortar</span>',
+};
+const statusChip=state=>STATUS_CHIP[state]||STATUS_CHIP.observar;
 function relRenderAdTable(id,list){
   const el=document.getElementById(id); if(!el) return;
   const cols=[
-    {key:'ad',label:'Anúncio',type:'dim',big:true,stk:'l1'},{key:'status',label:'Status',type:'dim',w:140},
+    {key:'ad',label:'Anúncio',type:'dim',big:true,stk:'l'},{key:'status',label:'Status',type:'dim',w:110},
     {key:'camp',label:'Campanha',type:'dim',big:true},{key:'adset',label:'Conjunto',type:'dim',big:true},
-    {key:'gasto',label:'Gasto',type:'brl'},{key:'im',label:'Impr.',type:'int'},
-    {key:'cpm',label:'CPM',type:'brl'},{key:'ctr',label:'CTR',type:'pct'},
+    {key:'gasto',label:'Gasto',type:'brl'},
+    {key:'hr',label:'HR',type:'pct'},{key:'br',label:'BR',type:'pct'},{key:'ctr',label:'CTR',type:'pct'},
     {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
     {key:'mqls',label:'MQLs',type:'int'},{key:'tx',label:'Tx‑MQL',type:'pct'},
     {key:'cpmql',label:'CPMQL',type:'brl'},
     // Lead A: métrica PARALELA ao MQL — CPL‑A/Tx‑A/A:MQL
     {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
-    {key:'convmql',label:'ConvMQL',type:'pct'},
+    {key:'convagd',label:'ConvAGD',type:'pct'},
     {key:'vendas',label:'Vendas',type:'int'},
     {key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Faturamento',type:'brl'},
@@ -800,7 +672,7 @@ function relRenderAdTable(id,list){
   const rows=list.map(item=>{
     const cells=adRowCells(item.ad,item.a,item.struct);
     cells.status='';  // placeholder textual; o chip real entra via afterRender
-    return {k:item.ad, cells, _obs:item.obs, _cpmql:cells._cpmql, _cac:cells._cac};
+    return {k:item.ad, cells, _state:adStatusState(item.a), _cpmql:cells._cpmql, _cac:cells._cac};
   });
   renderTable({
     id, cols, rows, center:true,   // Mar10: só as MÉTRICAS centralizam; dim fica à esquerda (CSS .dt-center)
@@ -813,7 +685,7 @@ function relRenderAdTable(id,list){
         cols.forEach((c,ci)=>{
           if(ci>=tds.length) return;
           const td=tds[ci];
-          if(c.key==='status') td.innerHTML=statusChip(item._obs);
+          if(c.key==='status') td.innerHTML=statusChip(item._state);
           if(c.key==='cpmql'){ const mc=metaColorClass(item._cpmql,METAS.cpmql); if(mc) td.classList.add(mc); }
           if(c.key==='cac'){ const mc=metaColorClass(item._cac,METAS.cac); if(mc) td.classList.add(mc); }
         });
@@ -922,13 +794,12 @@ function renderRelAds(){
   const pool=Object.entries(agg).filter(([ad,a])=>a.sp>0).map(([ad,a])=>({ad, a, struct:struct[ad]||{camp:'—',adset:'—'}}));
 
   const all=pool.slice().sort((x,y)=>{ const sx=adSampleOk(x.a), sy=adSampleOk(y.a);
-    if(sx!==sy) return sx?-1:1; return cmpBest(x.a,y.a); })
-    .map(it=>({...it, obs:!adSampleOk(it.a)}));
-  const champs=all.filter(it=>!it.obs).length;
+    if(sx!==sy) return sx?-1:1; return cmpBest(x.a,y.a); });
+  const avaliados=all.filter(it=>adSampleOk(it.a)).length;
 
   relRenderAdTable('relTop',all);
   document.getElementById('relTopCount').textContent =
-    champs+' '+(champs===1?'campeão':'campeões')+' de '+all.length+' anúncio'+(all.length===1?'':'s')+' com gasto';
+    avaliados+' avaliado'+(avaliados===1?'':'s')+' de '+all.length+' anúncio'+(all.length===1?'':'s')+' com gasto';
 }
 
 /* nota de referência do painel de metas (mostra as metas ativas + legenda de cor) */
@@ -971,8 +842,9 @@ const DAILY_COLS=[
   {key:'leads',label:'Leads',type:'int',heat:'leads'},{key:'cpl',label:'CPL',type:'brl'},
   {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int',heat:'mqls'},{key:'cpmql',label:'CPMQL',type:'brl'},
   // Lead A: métrica PARALELA ao MQL (mais qualificado ainda) — CPL‑A/Tx‑A/A:MQL
-  {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
-  {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
+  // heatmap: Leads A laranja · CPL‑A cinza claro (ver --heat-la/--heat-cpla)
+  {key:'la',label:'Leads A',type:'int',heat:'la'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl',heat:'cpla'},
+  {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
   {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
 ];
 function dailyCells(x,d,isTotal){
@@ -980,7 +852,7 @@ function dailyCells(x,d,isTotal){
   return {date:isTotal?null:x.d, wd:isTotal?'':weekday(x.d), gasto:d.gasto, cpm:d.cpm, ctr:d.ctr, cr:d.cr, convlp:d.convlp,
     leads:x.leads, cpl:d.cpl, tx:d.tx, mqls:x.mqls, cpmql:d.cpmql,
     la:d.la, txa:d.txa, amql:d.amql, cpla:d.cpla,
-    convmql:s.convmql, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas};
+    convagd:s.convagd, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas};
 }
 
 /* ---------------- PAGE 2: Captura Meta Ads ---------------- */
@@ -1014,7 +886,7 @@ function renderMeta(){
     ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
-    ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvMQL',s.convmql!=null?pct(s.convmql):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
+    ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvAGD',s.convagd!=null?pct(s.convagd):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
     ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
   ];
   document.getElementById('metaFunnel').innerHTML=funnelHTML(steps);
@@ -1050,27 +922,30 @@ function renderMeta(){
 
   // hierarquia — cada tabela vem do escopo que exclui a PRÓPRIA dimensão,
   // então todas as linhas irmãs continuam visíveis para multi-seleção (Ctrl).
-  // band:'l' (dim+Gasto) fica grudado na borda esquerda; as demais colunas
-  // rolam horizontalmente juntas (band do meio) — cabendo tudo, não aparece
-  // scroll nenhum e fica idêntico a uma tabela única, cabeçalho incluso.
+  // dim+Gasto ficam sticky (stk:'l') na borda esquerda; as demais colunas
+  // rolam horizontalmente dentro da MESMA tabela (ver stkOffsets em renderTable).
   const hcols=[
-    {key:'dim',label:'',type:'dim',big:true,band:'l'},{key:'gasto',label:'Gasto',type:'brl',band:'l'},
+    {key:'dim',label:'',type:'dim',big:true,stk:'l'},{key:'gasto',label:'Gasto',type:'brl',stk:'l'},
     {key:'cpm',label:'CPM',type:'brl'},
     {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
     {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
     {key:'tx',label:'Tx‑MQL',type:'pct'},
     {key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
     {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
-    {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
+    {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
   ];
-  function hierRows(map){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
+  // colunas extras só da tabela "Anúncios": status Ativo/Pausado (Ad Status
+  // do Meta Ads) e Prévia (ícone de olho, linka o criativo), fixa à direita.
+  const adExtraCols=[{key:'adStatus',label:'Status',type:'html',w:96},{key:'preview',label:'Prévia',type:'html',w:56,stk:'r'}];
+  function hierRows(map,extra){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
       la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
-      convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas}};}); }
+      convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas,
+      ...(extra?extra(k):{})}};}); }
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
     la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
-    convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas};}
+    convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas};}
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
   const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad');
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
@@ -1080,7 +955,9 @@ function renderMeta(){
     selectable:true, selSet:STATE.mSelC, onSelect:(k,e)=>selDim('C',k,e&&(e.ctrlKey||e.metaKey))});
   renderTable({id:'tAdset', cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fS,Sa.fAg)),
     selectable:true, selSet:STATE.mSelA, onSelect:(k,e)=>selDim('A',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAd', cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fS,Sd.fAg)),
+  renderTable({id:'tAd', cols:[...hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c),...adExtraCols],
+    rows:hierRows(aggD,k=>({adStatus:adStatusBadge(k),preview:adPreviewCell(k)})),
+    total:{...totRowOf(totals(Sd.fL,Sd.fM,Sd.fS,Sd.fAg)),adStatus:null,preview:null},
     selectable:true, selSet:STATE.mSelAd, onSelect:(k,e)=>selDim('D',k,e&&(e.ctrlKey||e.metaKey))});
 
   // Mar03/Mar10: cada gráfico varia a dimensão da sua tabela — MQLs por dia, 1 linha
@@ -1193,7 +1070,7 @@ function setPage(p){ STATE.page=p;
   document.getElementById('page-geral').classList.toggle('active',p==='geral');
   document.getElementById('page-meta').classList.toggle('active',p==='meta');
   document.getElementById('page-rel').classList.toggle('active',p==='rel');
-  document.getElementById('ptitle').textContent = p==='meta'?'Captura Meta Ads':(p==='rel'?'Relatório':'Visão Geral de Leads');
+  document.getElementById('ptitle').textContent = p==='meta'?'Meta Ads':(p==='rel'?'Insights de IA':'Visão Geral');
   document.getElementById('navToggle').checked=false;
   history.replaceState(null,'', p==='meta'?'#meta':(p==='rel'?'#rel':'#geral'));
   renderAll();
@@ -1211,12 +1088,12 @@ document.getElementById('taxToggle').addEventListener('click',function(){ STATE.
    B.usd_brl_rate), "off" = USD nativo. */
 (function wireCurrencyToggle(){
   const el=document.getElementById('currencyToggle'); if(!el) return;
-  const label=el.querySelector('.toggle-label');
+  const opts=[...el.querySelectorAll('.cur-opt')];
   const fxEl=document.getElementById('fxRate');
   if(fxEl) fxEl.textContent='1 USD = '+nf2.format(USD_RATE)+' BRL';
-  const sync=()=>{ el.classList.toggle('on',STATE.currency==='BRL'); if(label) label.textContent='Moeda: '+STATE.currency; };
+  const sync=()=>{ opts.forEach(b=>b.classList.toggle('active',b.dataset.cur===STATE.currency)); };
   sync();
-  el.addEventListener('click',function(){ STATE.currency=STATE.currency==='BRL'?'USD':'BRL'; sync(); renderAll(); });
+  opts.forEach(b=>b.addEventListener('click',function(){ if(STATE.currency===this.dataset.cur) return; STATE.currency=this.dataset.cur; sync(); renderAll(); }));
 })();
 /* seletor de período: abre/fecha popover, aplicar/cancelar, fechar ao clicar fora/Esc */
 document.getElementById('periodBtn').addEventListener('click',e=>{ e.stopPropagation(); ppIsOpen()?ppClose():ppOpen(); });

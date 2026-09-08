@@ -75,7 +75,12 @@ puro + Chart.js via CDN) publicado no **GitHub Pages**, que cruza a lista de
 ## Fontes de dados (Google Sheets) — Thata Junqueira
 
 **Planilha "Meta Ads"** — `SPREADSHEET_ID_META = "14yy7dhldcjPC2VzkXOfzGaS-kdqn5c3y3GWOm4vGj3c"`, aba única `gid=0`:
-`Day` · `Campaign Name` · `Ad Set Name` · `Ad Name` · `Amount Spent` (**USD nativo**) · `Impressions` · `Link Clicks` · `Landing Page Views` · `Leads` · `3-Second Video Views` · `Creative Instagram Permalink`.
+`Day` · `Campaign Name` · `Ad Set Name` · `Ad Name` · `Amount Spent` (**USD nativo**) · `Impressions` · `Link Clicks` · `Landing Page Views` · `Leads` · `3-Second Video Views` · `Video Views de 50%` · `Ad Status` · `Creative Instagram Permalink`.
+`3-Second Video Views`/`Video Views de 50%` alimentam **HR** (Hook Rate) e **BR**
+(Body Rate) na tabela Top Anúncios (calculados em `app.js::derive`, nunca no
+Python). `Ad Status` (`ACTIVE`/`PAUSED`) vira o badge **Ativo/Pausado** na
+tabela "Anúncios" (Captura Meta Ads) — mapa `ad_status` em `build.py::read_meta`,
+igual ao `ad_links` do permalink (usado no ícone "Prévia" 👁 da mesma tabela).
 
 **Planilha "Central de Eventos - 2026"** — `SPREADSHEET_ID_LEADS = "1v3mc-Z3lUYzGGkyIIYdK9PL3M-O6cgIBTlUWHQDboGU"`:
 
@@ -136,20 +141,21 @@ ver decisões documentadas no topo de `build.py`.
 
 ### Imposto da mídia paga
 `TAX_FACTOR = 1.0` em `build.py` — este cliente não tem imposto de mídia. O
-toggle "Imposto Meta" continua existindo na UI (padrão do template) mas fica
-sem efeito prático com `TAX_FACTOR = 1.0`.
+toggle "Imposto Meta" (switch on/off, `#taxToggle`) continua existindo na UI
+(padrão do template) mas fica sem efeito prático com `TAX_FACTOR = 1.0`.
 
 ### Conversão de moeda (USD → BRL)
 O gasto do Meta Ads e o Faturamento (`fat`, de `Fat. líquido (USD)`) são ambos
 **nativos em USD**. `build.py` busca a cotação USD/BRL 1x por build
 (`fetch_usd_brl_rate()`, APIs públicas sem chave, com fallback fixo 5.30 se
 todas falharem — nunca quebra o build) e grava em `DATA.build.usd_brl_rate`. O
-toggle **"Moeda: BRL/USD"** na topbar (`STATE.currency` em `app.js`, mesmo
-padrão do toggle de imposto) multiplica (`BRL`) ou mantém (`USD`) os valores
+seletor de moeda na topbar (`#currencyToggle`, dois botões 🇺🇸 USD / 🇧🇷 BRL —
+`STATE.currency` em `app.js`) multiplica (`BRL`) ou mantém (`USD`) os valores
 nativos ao vivo no navegador — nunca no Python — via `curF()` (mesma função
 para gasto e fat, já que ambos partem de USD; CAC/ROAS/Ticket herdam a
-conversão por dependerem de gasto/fat). A cotação vigente aparece como texto
-abaixo do toggle (`#fxRate` em `template.html`, preenchido em `app.js`).
+conversão por dependerem de gasto/fat). A cotação vigente (dinâmica, vinda de
+`DATA.build.usd_brl_rate`) aparece como texto abaixo do seletor (`#fxRate` em
+`template.html`, preenchido em `app.js`).
 
 ### Convenções de campanha (do cliente)
 Campanhas usam dois prefixos — `OPN` e `OPNF` (`MAIN_PRODUCT_PREFIX = "OPN"` é
@@ -187,14 +193,21 @@ e, abaixo, acrescenta 3 blocos novos + um painel de metas editável:
   mínimo amostral (MQLs), N dias p/ corte. Persiste em `localStorage['dm_metas']`, default de
   `build.py` (`META_CPMQL`/`META_CAC`=None → "não definida"; `VOLUME_MIN_AMOSTRAL`/`N_DIAS_CORTE`).
   Editar recolore **CPMQL/CAC** nas tabelas de anúncio (verde ≤ meta · amarelo até +30% ·
-  vermelho acima) e ajusta o badge Em observação/Avaliável, **tudo ao vivo**
+  vermelho acima) e reavalia o **Status** do anúncio (ver abaixo), **tudo ao vivo**
   (`METAS` + `renderRelAds()` em `app.js`).
-- **Top Anúncios** e **Piores Anúncios** — 17 colunas + coluna **Status** (Anúncio · Status ·
-  Campanha · Conjunto · Gasto · Impr · CPM · CTR · Leads · CPL · MQLs · Tx‑MQL · CPMQL · ConvMQL ·
-  Vendas · CAC · Faturamento · ROAS · **Link**). Anúncio, Status e Link ficam **sticky**.
-  Ranking pelo **resultado mais profundo disponível** (Venda→MQL), amostra relevante primeiro;
-  sem amostra → badge **"Em observação"**. Limiares em `build.py`: `SAMPLE_MIN_SPEND`,
-  `SAMPLE_MIN_MQLS`, `TOP_ADS_N`.
+- **Top Anúncios** — 22 colunas (Anúncio · Status · Campanha · Conjunto · Gasto · HR · BR · CTR ·
+  Leads · CPL · MQLs · Tx‑MQL · CPMQL · Leads A · Tx‑A · A:MQL · CPL‑A · ConvAGD ·
+  Vendas · CAC · Faturamento · ROAS · **Link**). Anúncio e Link ficam **sticky**
+  (colunas com `stk:'l'`/`stk:'r'` em `renderTable`/`app.js`: `position:sticky` numa
+  única `<table>`, offset calculado em JS somando a largura das colunas sticky
+  anteriores — mesmo mecanismo usado nas 3 tabelas hierárquicas de Campanha/Conjunto/
+  Anúncio, ver abaixo). **HR** (Hook Rate = 3‑Second Video Views/Impressions) e
+  **BR** (Body Rate = Video Views 50%/Impressions) substituíram CPM/Impressões.
+  Ranking pelo **resultado mais profundo disponível** (Venda→MQL), amostra relevante primeiro.
+  **Status** (`adStatusState()` em `app.js`, vs. metas de CPMQL/CAC do painel): **Escalar**
+  (verde, dentro da meta) · **Manter** (azul, até +30% da meta) · **Cortar** (vermelho, acima
+  do teto) · **Observar** (amarelo, sem amostra suficiente ainda). Limiares em `build.py`:
+  `SAMPLE_MIN_SPEND`, `SAMPLE_MIN_MQLS`, `TOP_ADS_N`.
 - **Insights de Tráfego** — texto por período redigido pelo **Claude** (linguagem de
   gestor de tráfego), lido de `build/relatorios.json` (sem API no build/navegador —
   o site só exibe o texto já pronto). Formato em **4 quadrantes** por período. Cada
@@ -241,7 +254,8 @@ Sem a coluna, o link vira "—".
 > Página 1 usa **funil vertical de leads** + KPIs secundários. Topbar tem
 > **seletor de período em calendário** (default "Este mês"). **Heatmap** = cor FIXA
 > por métrica (só opacidade varia): **Gasto=vermelho · Leads=azul · MQLs=ciano ·
-> Vendas=verde · ROAS=amarelo** (`--heat-gasto/leads/mqls/vendas/roas`).
+> Vendas=verde · ROAS=amarelo · Leads A=laranja · CPL‑A=cinza claro**
+> (`--heat-gasto/leads/mqls/vendas/roas/la/cpla`).
 
 O `build.py` **não agrega**: exporta as linhas cruas e TODA a lógica (filtros de
 data, filtro cruzado, KPIs, tabelas, gráficos, heatmap, imposto) roda no navegador.
@@ -258,22 +272,29 @@ python build/build.py --leads-file leads.csv --meta-file meta.csv \
 
 ## Especificação funcional (resumo)
 
-Três **páginas separadas** (sidebar):
-1. **Visão Geral de Leads** — funil vertical (Gasto → Impressões → Cliques → Leads →
+Três **páginas separadas** (sidebar; rótulos exibidos: **Visão Geral** ·
+**Meta Ads** · **Insights de IA** — ids internos `geral`/`meta`/`rel` continuam
+os mesmos em `app.js`/`template.html`):
+1. **Visão Geral** (id `geral`) — funil vertical (Gasto → Impressões → Cliques → Leads →
    MQLs → Vendas/Faturamento) + KPIs secundários; gráfico combinado diário +
-   tabela diária com heatmap (todos os leads); barras por origem/faixa/plataforma/profissão.
-2. **Captura mídia paga** — funil em etapas; combinado diário; barras por utm_content;
+   tabela diária com heatmap (todos os leads; heatmap também em Leads A/CPL‑A/Vendas/ROAS,
+   ver `HEAT_HUE` em `app.js`); barras por origem/faixa/plataforma/profissão.
+2. **Meta Ads** (id `meta`) — funil em etapas; combinado diário; barras por utm_content;
    tabela diária com heatmap (só mídia paga); 3 tabelas hierárquicas Campanha →
-   Conjunto → Anúncio, cada uma com gráfico de linha embaixo.
-3. **Relatório** — espelha a Visão Geral + painel de Metas editável + Top/Piores
-   Anúncios (17 colunas + Status) + Insights de Tráfego. Ver `build/GUIA-RELATORIOS.md`.
+   Conjunto → Anúncio, cada uma com gráfico de linha embaixo. A tabela "Anúncios"
+   tem 2 colunas extras (`adExtraCols`): **Status** (badge Ativo/Pausado, coluna
+   "Ad Status" do Meta Ads) e **Prévia** (ícone 👁, sticky à direita, linka `ad_links`).
+3. **Insights de IA** (id `rel`) — espelha a Visão Geral + painel de Metas editável +
+   Top Anúncios (22 colunas + Status) + Insights de Tráfego. Ver `build/GUIA-RELATORIOS.md`.
 
 **Ordem das colunas nas tabelas:** `Data · Dia · Gasto · CPM · CTR · CR · ConvLP ·
-Leads · CPL · Tx‑MQL · MQLs · CPMQL · Leads A · Tx‑A · A:MQL · CPL‑A · ConvMQL ·
-Vendas · CAC · Fat. · ROAS` (ver `DAILY_COLS`/`hcols` em `app.js`). Não há mais
-colunas de Checkouts/VisCHK/Agend./Reun. Realiz./Receita — removidas por não
-terem fonte de dados útil neste cliente (Meta Ads sem "Adds to Cart"; Receita
-era redundante com Faturamento).
+Leads · CPL · Tx‑MQL · MQLs · CPMQL · Leads A · Tx‑A · A:MQL · CPL‑A · ConvAGD ·
+Vendas · CAC · Fat. · ROAS` (ver `DAILY_COLS`/`hcols` em `app.js`). **ConvAGD**
+(= Vendas / Agendamentos) substituiu o antigo "ConvMQL" — nome e fórmula estavam
+incorretos (a coluna nunca dividiu por MQLs). Não há mais colunas de
+Checkouts/VisCHK/Agend./Reun. Realiz./Receita — removidas por não terem fonte
+de dados útil neste cliente (Meta Ads sem "Adds to Cart"; Receita era
+redundante com Faturamento).
 
 **Regras obrigatórias das tabelas** (ver `GUIA-REPLICACAO.md`): cabeçalho sticky;
 ordenação tri‑state; colunas redimensionáveis (persist localStorage); linha
