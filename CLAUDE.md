@@ -123,6 +123,14 @@ Faturamento (`fat`) vem de `Fat. líquido (USD)` — **nativo em USD** (decisão
 cliente: usar o líquido em dólar em vez do bruto em BRL; ver comentário em
 `build.py::read_sales`), mesmo padrão do gasto do Meta Ads. Não há mais campo
 `receita`/card "Receita" separado (removido — era redundante com Faturamento).
+
+**Esta dash considera SÓ as vendas do MBA:** `read_sales()` filtra a aba
+Compradores pela coluna `Produto` — linhas cujo `Produto` não contém "mba"
+(case/acento-insensitive, `is_mba_sale()`) são descartadas antes de entrar em
+`DATA.sales[]` (não contam em vendas, faturamento, CAC, ROAS nem nos
+Top/Piores Anúncios). Outras ofertas da mesma planilha (ex.: Sessão
+Estratégica, Sala Secreta) ficam de fora. O build loga quantas linhas foram
+ignoradas por produto (`vendas ignoradas por Produto != MBA` em stderr).
 "Status" de Agendamentos/Compradores não teve os valores exatos confirmados —
 ver decisões documentadas no topo de `build.py`.
 
