@@ -72,7 +72,13 @@ def in_range(row_date: str | None, start: date, end: date) -> bool:
 
 
 def agg(meta: list[dict], leads: list[dict], start: date, end: date, camp: str | None = None,
-        adset: str | None = None, ad: str | None = None) -> dict:
+        adset: str | None = None, ad: str | None = None, sales: list[dict] | None = None,
+        agendamentos: list[dict] | None = None) -> dict:
+    """`sales`/`agendamentos` são os registros NÃO agregados de build.py
+    (`data["sales"]`/`data["agendamentos"]`, mesmo padrão de `meta`/`leads`:
+    cada um tem `d`/`camp`/`adset`/`ad`) — passá-los agrega vendas/faturamento/
+    receita/agendamentos/reuniões junto, na MESMA janela e filtro de estrutura.
+    Omitir (default None) mantém o comportamento antigo (campos zerados)."""
     def keep(r):
         if not in_range(r["d"], start, end):
             return False
@@ -86,16 +92,37 @@ def agg(meta: list[dict], leads: list[dict], start: date, end: date, camp: str |
 
     m = [r for r in meta if keep(r)]
     l = [r for r in leads if keep(r)]
+    s = [r for r in (sales or []) if keep(r)]
+    ag = [r for r in (agendamentos or []) if keep(r)]
     spend = sum(r["sp"] for r in m) * bp.TAX_FACTOR
     impr = sum(r["im"] for r in m)
     clicks = sum(r["cl"] for r in m)
     n_leads = len(l)
     n_mqls = sum(r["q"] for r in l)
-    return {"spend": spend, "impr": impr, "clicks": clicks, "leads": n_leads, "mqls": n_mqls}
+    n_vendas = sum(r.get("vendas", 0) for r in s)
+    fat = sum(r.get("fat", 0.0) for r in s)
+    receita = sum(r.get("receita", 0.0) for r in s)
+    n_agendamentos = sum(r.get("agendamentos", 0) for r in ag)
+    n_reunioes = sum(r.get("reunioes", 0) for r in ag)
+    return {"spend": spend, "impr": impr, "clicks": clicks, "leads": n_leads, "mqls": n_mqls,
+            "vendas": n_vendas, "fat": fat, "receita": receita,
+            "agendamentos": n_agendamentos, "reunioes": n_reunioes}
 
 
 def derived(a: dict) -> dict:
+    """Deriva as métricas de topo (CPM/CTR/CPL/Tx‑MQL/CPMQL) e, quando `a` traz
+    vendas/agendamentos (ver `agg()`), também as etapas seguintes do funil
+    (Agendamento → Reunião Realizada → Venda), no MESMO padrão null-quando-
+    sem-volume usado em app.js::salesOf() — nunca vira 0 nem divide por zero."""
     spend, impr, clicks, leads, mqls = a["spend"], a["impr"], a["clicks"], a["leads"], a["mqls"]
+    vendas = a.get("vendas") or 0
+    fat = a.get("fat") or 0.0
+    receita = a.get("receita") or 0.0
+    agendamentos = a.get("agendamentos") or 0
+    reunioes = a.get("reunioes") or 0
+    has_ag = agendamentos > 0
+    has_re = reunioes > 0
+    has_vd = vendas > 0 or fat > 0
     return {
         "cpm": (spend / impr * 1000) if impr else None,
         "ctr": (clicks / impr) if impr else None,
@@ -103,6 +130,20 @@ def derived(a: dict) -> dict:
         "convform": (leads / clicks) if clicks else None,
         "txmql": (mqls / leads) if leads else None,
         "cpmql": (spend / mqls) if mqls else None,
+        # MQL -> Agendamento
+        "txagendamento": (agendamentos / mqls) if (has_ag and mqls) else None,
+        "cpag": (spend / agendamentos) if has_ag else None,
+        # Agendamento -> Reunião Realizada
+        "txnoshow": (1 - (reunioes / agendamentos)) if (has_re and has_ag) else None,
+        "cprr": (spend / reunioes) if has_re else None,
+        # Reunião Realizada -> Venda
+        "txvenda": (vendas / reunioes) if (has_vd and has_re) else None,
+        "cac": (spend / vendas) if (has_vd and vendas) else None,
+        "roas": (fat / spend) if (has_vd and spend) else None,
+        "ticket_medio": (fat / vendas) if (has_vd and vendas) else None,
+        "roas_receita": (receita / spend) if (has_vd and spend) else None,
+        "ticket_receita": (receita / vendas) if (has_vd and vendas) else None,
+        "convmql": (vendas / mqls) if (has_vd and mqls) else None,
         **a,
     }
 

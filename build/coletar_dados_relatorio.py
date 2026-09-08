@@ -3,18 +3,20 @@
 """
 Gera build/relatorios_dados.json: SÓ NÚMEROS (nenhuma interpretação/texto),
 agregados por período/campanha/conjunto/anúncio a partir dos mesmos dados que
-alimentam o dashboard (mídia paga x Leads). É o insumo lido pela Routine do
-Claude (ver GUIA-RELATORIOS.md) para escrever build/relatorios.json — garante
-que os números do texto batem 1:1 com o site sem depender do Claude "fazer
-conta". Não chama nenhuma API de IA/LLM.
+alimentam o dashboard (Central de Leads x Meta Ads x Agendamentos x
+Compradores). É o insumo lido pela Routine do Claude (ver GUIA-RELATORIOS.md)
+para escrever build/relatorios.json — garante que os números do texto batem
+1:1 com o site sem depender do Claude "fazer conta". Não chama nenhuma API de
+IA/LLM.
 
 Uso:
     python build/coletar_dados_relatorio.py --out build/relatorios_dados.json
-    python build/coletar_dados_relatorio.py --leads-file leads.csv --meta-file meta.csv --out build/relatorios_dados.json
+    python build/coletar_dados_relatorio.py --leads-file leads.csv --meta-file meta.csv \
+        --agendamentos-file agendamentos.csv --sales-file sales.csv --out build/relatorios_dados.json
 
-Sem --leads-file/--meta-file, busca os CSVs públicos da planilha (mesma URL de
-build.py) — precisa de acesso a docs.google.com (o runner do GitHub Actions tem;
-o sandbox do agente normalmente não).
+Sem os --*-file, busca os CSVs públicos das planilhas (mesmas URLs de
+build.py) — precisa de acesso a docs.google.com (o runner do GitHub Actions
+tem; o sandbox do agente normalmente não).
 """
 from __future__ import annotations
 
@@ -32,20 +34,25 @@ from relatorio_lib import (
 )
 
 
-def daily_series(meta: list[dict], leads: list[dict], start, end, camp=None, adset=None, ad=None) -> list[dict]:
-    """Uma linha por dia (spend/leads/mqls + derivadas) — dá ao Claude a base
-    pra enxergar tendência (ex.: CPM subindo/Tx-MQL caindo N dias seguidos)."""
+def daily_series(meta: list[dict], leads: list[dict], start, end, sales=None, agendamentos=None,
+                  camp=None, adset=None, ad=None) -> list[dict]:
+    """Uma linha por dia (spend/leads/mqls + derivadas, e agendamentos/vendas
+    quando existirem) — dá ao Claude a base pra enxergar tendência (ex.: CPM
+    subindo/Tx-MQL caindo N dias seguidos)."""
     out = []
     cur = start
     while cur <= end:
-        a = derived(agg(meta, leads, cur, cur, camp=camp, adset=adset, ad=ad))
-        if a["spend"] or a["leads"]:
+        a = derived(agg(meta, leads, cur, cur, camp=camp, adset=adset, ad=ad,
+                         sales=sales, agendamentos=agendamentos))
+        if a["spend"] or a["leads"] or a.get("vendas") or a.get("agendamentos"):
             out.append({
                 "d": cur.strftime("%Y-%m-%d"),
                 "spend": round(a["spend"], 2), "impr": a["impr"], "clicks": a["clicks"],
                 "leads": a["leads"], "mqls": a["mqls"],
                 "cpm": _r(a["cpm"]), "ctr": _r(a["ctr"], 4), "cpl": _r(a["cpl"]),
                 "txmql": _r(a["txmql"], 4), "cpmql": _r(a["cpmql"]),
+                "agendamentos": a.get("agendamentos", 0), "reunioes": a.get("reunioes", 0),
+                "vendas": a.get("vendas", 0), "fat": round(a.get("fat", 0.0), 2),
             })
         cur += timedelta(days=1)
     return out
@@ -61,10 +68,21 @@ def totais_dict(a: dict) -> dict:
         "leads": a["leads"], "mqls": a["mqls"],
         "cpm": _r(a["cpm"]), "ctr": _r(a["ctr"], 4), "cpl": _r(a["cpl"]),
         "convform": _r(a["convform"], 4), "txmql": _r(a["txmql"], 4), "cpmql": _r(a["cpmql"]),
+        # MQL -> Agendamento -> Reunião Realizada -> Venda (só != 0/None quando
+        # há dado de Agendamentos/Compradores cruzado — ver relatorio_lib.derived).
+        "agendamentos": a.get("agendamentos", 0), "reunioes": a.get("reunioes", 0),
+        "txagendamento": _r(a.get("txagendamento"), 4), "cpag": _r(a.get("cpag")),
+        "txnoshow": _r(a.get("txnoshow"), 4), "cprr": _r(a.get("cprr")),
+        "vendas": a.get("vendas", 0), "fat": round(a.get("fat", 0.0), 2),
+        "receita": round(a.get("receita", 0.0), 2),
+        "txvenda": _r(a.get("txvenda"), 4), "convmql": _r(a.get("convmql"), 4),
+        "cac": _r(a.get("cac")), "roas": _r(a.get("roas"), 4), "roas_receita": _r(a.get("roas_receita"), 4),
+        "ticket_medio": _r(a.get("ticket_medio")), "ticket_receita": _r(a.get("ticket_receita")),
     }
 
 
-def breakdown(meta: list[dict], leads: list[dict], start, end, dim: str, camp_filter=None) -> list[dict]:
+def breakdown(meta: list[dict], leads: list[dict], start, end, dim: str, camp_filter=None,
+              sales=None, agendamentos=None) -> list[dict]:
     """Agrega por campanha/conjunto/anúncio dentro do período (só métricas
     agregadas — SEM série diária por estrutura, que inchava o arquivo). A série
     diária existe apenas AGREGADA no nível do período (ver periodo_payload)."""
@@ -75,12 +93,21 @@ def breakdown(meta: list[dict], leads: list[dict], start, end, dim: str, camp_fi
             return (r["camp"], r["adset"])
         return (r["camp"], r["adset"], r["ad"])
 
+    def in_scope(r):
+        return in_range(r["d"], start, end) and (camp_filter is None or r["camp"] == camp_filter)
+
     keys = set()
     for r in meta:
-        if in_range(r["d"], start, end) and (camp_filter is None or r["camp"] == camp_filter):
+        if in_scope(r):
             keys.add(key_of(r))
     for r in leads:
-        if in_range(r["d"], start, end) and (camp_filter is None or r["camp"] == camp_filter):
+        if in_scope(r):
+            keys.add(key_of(r))
+    for r in (sales or []):
+        if in_scope(r):
+            keys.add(key_of(r))
+    for r in (agendamentos or []):
+        if in_scope(r):
             keys.add(key_of(r))
 
     out = []
@@ -92,8 +119,9 @@ def breakdown(meta: list[dict], leads: list[dict], start, end, dim: str, camp_fi
         else:
             camp, adset, ad = k
 
-        a = derived(agg(meta, leads, start, end, camp=camp, adset=adset, ad=ad))
-        if not a["spend"] and not a["leads"]:
+        a = derived(agg(meta, leads, start, end, camp=camp, adset=adset, ad=ad,
+                         sales=sales, agendamentos=agendamentos))
+        if not a["spend"] and not a["leads"] and not a.get("vendas") and not a.get("agendamentos"):
             continue
         row = totais_dict(a)
         if dim == "camp":
@@ -151,7 +179,9 @@ def consolidado_criativos(por_anuncio: list[dict]) -> list[dict]:
 def whatsapp_numeros(label: str, start, end, cur: dict, saude: dict) -> dict:
     """Números já formatados (moeda/percentual) para o bloco copiável do
     WhatsApp — a Routine do Claude só preenche destaques/ações em texto,
-    nunca recalcula nem inventa estes valores (regra §6 do briefing)."""
+    nunca recalcula nem inventa estes valores (regra §6 do briefing).
+    Agendamentos/Vendas/CAC/ROAS usam o valor real quando `cur` traz dado
+    cruzado (ver relatorio_lib.derived); sem dado, ficam "Não disponível"."""
     return {
         "periodo_label": label,
         "periodo_range": f"{start.strftime('%d/%m/%Y')} a {end.strftime('%d/%m/%Y')}",
@@ -159,8 +189,13 @@ def whatsapp_numeros(label: str, start, end, cur: dict, saude: dict) -> dict:
         "connect_rate": "Não disponível", "conv_lp": "Não disponível",
         "leads": num(cur["leads"]), "cpl": money(cur["cpl"]),
         "mqls": num(cur["mqls"]), "cpa_cpmql": money(cur["cpmql"]),
-        "vendas": "Não disponível", "faturamento": "Não disponível",
-        "cac": "Não disponível", "roas": "Não disponível", "ticket_medio": "Não disponível",
+        "agendamentos": num(cur.get("agendamentos")) if cur.get("agendamentos") else "Não disponível",
+        "reunioes_realizadas": num(cur.get("reunioes")) if cur.get("reunioes") else "Não disponível",
+        "vendas": num(cur.get("vendas")) if cur.get("vendas") else "Não disponível",
+        "faturamento": money(cur.get("fat")) if cur.get("vendas") else "Não disponível",
+        "cac": money(cur.get("cac")) if cur.get("cac") is not None else "Não disponível",
+        "roas": (f"{cur['roas']:.2f}x".replace(".", ",") if cur.get("roas") is not None else "Não disponível"),
+        "ticket_medio": money(cur.get("ticket_medio")) if cur.get("ticket_medio") is not None else "Não disponível",
         "saude_funil": (
             f"{saude['nota']:.1f}/10 — {saude['classificacao']}" + (" (provisória)" if saude["provisoria"] else "")
             if saude["nota"] is not None else "Nota provisória — dados insuficientes"
@@ -168,18 +203,19 @@ def whatsapp_numeros(label: str, start, end, cur: dict, saude: dict) -> dict:
     }
 
 
-def periodo_payload(meta: list[dict], leads: list[dict], today, start, end, key, date_min, date_max,
+def periodo_payload(meta: list[dict], leads: list[dict], sales: list[dict], agendamentos: list[dict],
+                     today, start, end, key, date_min, date_max,
                      meta_cpmql, meta_cac, volume_min) -> dict:
-    cur = derived(agg(meta, leads, start, end))
-    ref7 = derived(agg(meta, leads, today - timedelta(days=6), today))
-    ref14 = derived(agg(meta, leads, today - timedelta(days=13), today))
-    ref30 = derived(agg(meta, leads, today - timedelta(days=29), today))
+    cur = derived(agg(meta, leads, start, end, sales=sales, agendamentos=agendamentos))
+    ref7 = derived(agg(meta, leads, today - timedelta(days=6), today, sales=sales, agendamentos=agendamentos))
+    ref14 = derived(agg(meta, leads, today - timedelta(days=13), today, sales=sales, agendamentos=agendamentos))
+    ref30 = derived(agg(meta, leads, today - timedelta(days=29), today, sales=sales, agendamentos=agendamentos))
 
     p_start, p_end, metodo = previous_period(key, start, end, today, date_min, date_max)
-    anterior = derived(agg(meta, leads, p_start, p_end)) if p_start else None
+    anterior = derived(agg(meta, leads, p_start, p_end, sales=sales, agendamentos=agendamentos)) if p_start else None
 
     saude = funnel_health(cur, ref30, meta_cpmql, meta_cac, volume_min, [ref7, ref14, ref30])
-    por_anuncio = breakdown(meta, leads, start, end, "ad")
+    por_anuncio = breakdown(meta, leads, start, end, "ad", sales=sales, agendamentos=agendamentos)
 
     return {
         "range": {"start": start.strftime("%Y-%m-%d"), "end": end.strftime("%Y-%m-%d")},
@@ -190,7 +226,7 @@ def periodo_payload(meta: list[dict], leads: list[dict], today, start, end, key,
         # por campanha/conjunto/anúncio foi REMOVIDA de propósito: ela respondia por
         # ~75% do tamanho do arquivo (≈280k tokens) e ninguém a consome — o veredito
         # por estrutura usa as métricas agregadas de por_campanha/conjunto/anuncio.
-        "serie_diaria": daily_series(meta, leads, start, end)[-60:],
+        "serie_diaria": daily_series(meta, leads, start, end, sales=sales, agendamentos=agendamentos)[-60:],
         "nota_saude": saude,
         "whatsapp_numeros": whatsapp_numeros("", start, end, cur, saude),
         "comparativos": {
@@ -203,8 +239,8 @@ def periodo_payload(meta: list[dict], leads: list[dict], today, start, end, key,
                 "variacao": compare(cur, anterior),
             },
         },
-        "por_campanha": breakdown(meta, leads, start, end, "camp"),
-        "por_conjunto": breakdown(meta, leads, start, end, "adset"),
+        "por_campanha": breakdown(meta, leads, start, end, "camp", sales=sales, agendamentos=agendamentos),
+        "por_conjunto": breakdown(meta, leads, start, end, "adset", sales=sales, agendamentos=agendamentos),
         "por_anuncio": por_anuncio,
         "criativos_consolidado": consolidado_criativos(por_anuncio),
     }
@@ -212,19 +248,21 @@ def periodo_payload(meta: list[dict], leads: list[dict], today, start, end, key,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--conversas-file")
-    ap.add_argument("--meta-file")
-    ap.add_argument("--sales-file")
-    ap.add_argument("--leads-file")
+    ap.add_argument("--leads-file", help="CSV local da aba \"Central de Leads\" (fonte principal)")
+    ap.add_argument("--meta-file", help="CSV local da planilha Meta Ads")
+    ap.add_argument("--agendamentos-file", help="CSV local da aba \"Agendamentos\" (Calendly)")
+    ap.add_argument("--sales-file", help="CSV local da aba \"Compradores\"")
     ap.add_argument("--out", default="build/relatorios_dados.json")
     args = ap.parse_args()
 
-    conversas_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_CONVERSAS), args.conversas_file)
-    meta_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_META), args.meta_file)
-    sales_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_SALES), args.sales_file)
-    leads_lp_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_LEADS), args.leads_file)
-    data = bp.process(conversas_rows, meta_rows, sales_rows, leads_lp_rows)
+    leads_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_LEADS, gid=bp.GID_LEADS), args.leads_file)
+    meta_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_META, gid=bp.GID_META), args.meta_file)
+    agendamentos_rows = bp.load_rows(
+        bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_LEADS, gid=bp.GID_AGENDAMENTOS), args.agendamentos_file)
+    sales_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_LEADS, gid=bp.GID_SALES), args.sales_file)
+    data = bp.process(leads_rows, meta_rows, agendamentos_rows, sales_rows)
     leads, meta = data["leads"], data["meta"]
+    sales, agendamentos = data["sales"], data["agendamentos"]
 
     now_brt = datetime.now(BRT)
     today = now_brt.date()
@@ -236,9 +274,9 @@ def main():
     out = {
         "generated_at": now_brt.strftime("%d/%m/%Y %H:%M"),
         "generated_at_iso": now_brt.isoformat(),
-        "fonte": "Números brutos agregados a partir do funil (mídia paga × Leads) — insumo para a "
-                 "Routine do Claude escrever build/relatorios.json (Insights de Tráfego). Sem "
-                 "interpretação/texto aqui, só aritmética.",
+        "fonte": "Números brutos agregados a partir do funil (Central de Leads x Meta Ads x Agendamentos x "
+                 "Compradores) — insumo para a Routine do Claude escrever build/relatorios.json (Insights de "
+                 "Tráfego). Sem interpretação/texto aqui, só aritmética.",
         "params": {
             "tax_factor": bp.TAX_FACTOR,
             "sample_min_spend": bp.SAMPLE_MIN_SPEND,
@@ -251,7 +289,7 @@ def main():
         "periodos": {},
     }
     for key, (start, end, label) in periods.items():
-        payload = periodo_payload(meta, leads, today, start, end, key, date_min, date_max,
+        payload = periodo_payload(meta, leads, sales, agendamentos, today, start, end, key, date_min, date_max,
                                    bp.META_CPMQL, bp.META_CAC, bp.VOLUME_MIN_AMOSTRAL)
         payload["whatsapp_numeros"]["periodo_label"] = label
         out["periodos"][key] = {"label": label, **payload}
