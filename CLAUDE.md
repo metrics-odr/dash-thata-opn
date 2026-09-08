@@ -151,7 +151,9 @@ O gasto do Meta Ads e o Faturamento (`fat`, de `Fat. líquido (USD)`) são ambos
 **nativos em USD**. `build.py` busca a cotação USD/BRL 1x por build
 (`fetch_usd_brl_rate()`, APIs públicas sem chave, com fallback fixo 5.30 se
 todas falharem — nunca quebra o build) e grava em `DATA.build.usd_brl_rate`. O
-seletor de moeda na topbar (`#currencyToggle`, dois botões 🇺🇸 USD / 🇧🇷 BRL —
+seletor de moeda na topbar (`#currencyToggle`, dois botões USD / BRL com
+bandeira em SVG inline — não emoji, que não renderiza como bandeira no
+Windows/Chrome — `.cur-flag` em `template.html`/`estilos.css`) —
 `STATE.currency` em `app.js`) multiplica (`BRL`) ou mantém (`USD`) os valores
 nativos ao vivo no navegador — nunca no Python — via `curF()` (mesma função
 para gasto e fat, já que ambos partem de USD; CAC/ROAS/Ticket herdam a
