@@ -1,13 +1,16 @@
 "use strict";
 const DATA = JSON.parse(document.getElementById('payload').textContent);
-const LEADS = DATA.leads, META = DATA.meta, SALES = DATA.sales||[], B = DATA.build;
+const LEADS = DATA.leads, META = DATA.meta, SALES = DATA.sales||[], AGD = DATA.agendamentos||[], B = DATA.build;
 const TAX = B.tax_factor || 1.0;
+const USD_RATE = B.usd_brl_rate || 5.30;   // gasto (meta[].sp) é USD nativo; toggle de moeda converte ao vivo
 
 /* ---------------- format ---------------- */
 const nf0=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
 const nf1=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
 const nf2=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const brl=v=>(v==null||!isFinite(v))?'-':'R$ '+nf2.format(v);
+/* símbolo segue o toggle de moeda (STATE.currency) — a conversão do VALOR em si
+   acontece onde o número é calculado (derive/salesOf/gráficos), via curF()/curBRL() */
+const brl=v=>(v==null||!isFinite(v))?'-':(typeof STATE!=='undefined'&&STATE.currency==='USD'?'US$ ':'R$ ')+nf2.format(v);
 const pct=v=>(v==null||!isFinite(v))?'-':nf2.format(v*100)+'%';
 const intf=v=>(v==null||!isFinite(v))?'-':nf0.format(v);
 const numf=v=>(v==null||!isFinite(v))?'-':nf1.format(v);
@@ -26,11 +29,20 @@ const TODAY = B.today || B.date_max;
 /* ---------------- STATE ---------------- */
 const STATE = {
   page:'geral', from:(()=>{const [y,m]=TODAY.split('-'); return `${y}-${m}-01`;})(), to:TODAY, preset:'mes', tax:true,
+  currency:'BRL',   // 'BRL' | 'USD' — toggle da topbar (mesmo padrão do toggle de imposto)
   selDays:new Set(),
   mSelC:new Set(), mSelA:new Set(), mSelAd:new Set(),
   sort:{}, colw: JSON.parse(localStorage.getItem('dm_colw')||'{}'),
 };
 const taxf = ()=> STATE.tax ? TAX : 1;
+/* meta[].sp é nativo em USD: em modo BRL multiplica pela cotação; em modo USD
+   fica como está (multiplicador 1). Usado em toda conta que parte do gasto
+   (derive/comboChart/lineChart/mqlByDimChart). */
+const curF = ()=> STATE.currency==='BRL' ? USD_RATE : 1;
+/* sales[]/agendamentos[] "fat"/"receita" são nativos em BRL (aba Compradores
+   já vem em BRL): em modo USD divide pela cotação; em modo BRL fica como está.
+   Mantém ROAS/Ticket coerentes (numerador e denominador na mesma moeda). */
+const curBRL = v => (v==null||!isFinite(v)) ? v : (STATE.currency==='USD' ? v/USD_RATE : v);
 
 /* active date test: selDays override the De/Até range */
 function dateActive(d){
@@ -43,16 +55,23 @@ const metaActive  = ()=> META.filter(m=>dateActive(m.d));
 /* vendas: registro por COMPRA, filtrado pela data REAL da compra (nunca pela
    data da conversa que originou o contato) — ver build.py::process (sales[]). */
 const salesActive = ()=> SALES.filter(s=>dateActive(s.d));
+/* agendamentos: registro por AGENDAMENTO (Calendly), mesma filosofia de sales[]
+   — data REAL do agendamento, camp/adset/ad vêm do lead casado por telefone OU
+   e-mail (ver build.py::read_agendamentos). */
+const agdActive = ()=> AGD.filter(r=>dateActive(r.d));
 
 /* ---------------- aggregation ---------------- */
 function derive(a){
-  const g=a.sp*taxf(), pv=a.pv||0;
-  const chk=a.chk||0;
-  return {gasto:g, impr:a.im, clicks:a.cl, pv, chk, leads:a.leads, mqls:a.mqls,
+  const g=a.sp*taxf()*curF(), pv=a.pv||0;
+  const chk=a.chk||0, la=a.la||0;
+  return {gasto:g, impr:a.im, clicks:a.cl, pv, chk, leads:a.leads, mqls:a.mqls, la,
     cpm:a.im?g/a.im*1000:null, ctr:a.im?a.cl/a.im:null, cpc:a.cl?g/a.cl:null,
     cr:a.cl?pv/a.cl:null, cpv:pv?g/pv:null,
     convlp:pv?a.leads/pv:null, vischk:pv?chk/pv:null,
-    cpl:a.leads?g/a.leads:null, cpmql:a.mqls?g/a.mqls:null, tx:a.leads?a.mqls/a.leads:null};
+    cpl:a.leads?g/a.leads:null, cpmql:a.mqls?g/a.mqls:null, tx:a.leads?a.mqls/a.leads:null,
+    // Lead A: métrica PARALELA ao MQL (nunca substitui) — Tx‑A (Lead A/Leads),
+    // CPL‑A (custo por Lead A) e A:MQL (proporção Lead A / MQL).
+    cpla:la?g/la:null, txa:a.leads?la/a.leads:null, amql:a.mqls?la/a.mqls:null};
 }
 /* --------- FUNIL: MQL → Venda (Vendas/Faturamento já ligados via build.py) ---------
    Funil do cliente: Impressões → Cliques → Leads → MQLs → Vendas → Faturamento.
@@ -63,11 +82,12 @@ function derive(a){
    tabelas e Top/Piores anúncios. Agendamentos/Reuniões Realizadas não têm fonte
    neste cliente — ficam null -> "-" até existir lista do comercial. */
 function salesOf(a){
-  const g=(a?a.sp:0)*taxf();
+  const g=(a?a.sp:0)*taxf()*curF();
   const mqls=(a&&a.mqls)||0;
   const agendamentos=(a&&a.agendamentos)||0, reunioes=(a&&a.reunioes)||0;
-  const vendas=(a&&a.vendas)||0, fat=(a&&a.fat)||0, receita=(a&&a.receita)||0;
-  const hasAg=agendamentos>0, hasRe=reunioes>0, hasVd=vendas>0||fat>0;
+  const vendas=(a&&a.vendas)||0, fatRaw=(a&&a.fat)||0, receitaRaw=(a&&a.receita)||0;
+  const fat=curBRL(fatRaw), receita=curBRL(receitaRaw);   // fat/receita nativos em BRL — convertidos p/ moeda ativa
+  const hasAg=agendamentos>0, hasRe=reunioes>0, hasVd=vendas>0||fatRaw>0;
   return {
     // MQL → Agendamento
     agendamentos: hasAg?agendamentos:null,
@@ -90,27 +110,32 @@ function salesOf(a){
     convmql:      hasVd&&mqls?vendas/mqls:null,
   };
 }
-function buildAgg(fL,fM,fS,dim){
+function buildAgg(fL,fM,fS,dim,fAg){
   const m={};
-  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,chk:0,leads:0,mqls:0,vendas:0,fat:0,receita:0});
+  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,chk:0,leads:0,mqls:0,la:0,vendas:0,fat:0,receita:0,agendamentos:0,reunioes:0});
   fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv; a.chk+=r.ck||0;});
-  fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q;});
+  fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q; a.la+=r.a||0;});
   fS.forEach(r=>{const a=get(r[dim]); a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.receita+=r.receita||0;});
+  (fAg||[]).forEach(r=>{const a=get(r[dim]); a.agendamentos+=r.agendamentos||0; a.reunioes+=r.reunioes||0;});
   return m;
 }
-function totals(fL,fM,fS){
+function totals(fL,fM,fS,fAg){
   let sp=0,im=0,cl=0,pv=0,chk=0; fM.forEach(r=>{sp+=r.sp;im+=r.im;cl+=r.cl;pv+=r.pv;chk+=r.ck||0;});
-  return {sp, im, cl, pv, chk, leads:fL.length, mqls:fL.reduce((s,r)=>s+r.q,0),
+  return {sp, im, cl, pv, chk, leads:fL.length, mqls:fL.reduce((s,r)=>s+r.q,0), la:fL.reduce((s,r)=>s+(r.a||0),0),
     vendas:fS.reduce((s,r)=>s+(r.vendas||0),0), fat:fS.reduce((s,r)=>s+(r.fat||0),0),
-    receita:fS.reduce((s,r)=>s+(r.receita||0),0)};
+    receita:fS.reduce((s,r)=>s+(r.receita||0),0),
+    agendamentos:(fAg||[]).reduce((s,r)=>s+(r.agendamentos||0),0),
+    reunioes:(fAg||[]).reduce((s,r)=>s+(r.reunioes||0),0)};
 }
-/* daily aggregation for a source pair. `d` (data da venda) é a data REAL da
-   compra (aba Compradores), não a data da conversa — ver build.py::process. */
-function daily(fL,fM,fS){
-  const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,chk:0,leads:0,mqls:0,vendas:0,fat:0,receita:0});
+/* daily aggregation for a source pair. `d` (data da venda/agendamento) é a
+   data REAL do evento (aba Compradores/Agendamentos), não a data do lead —
+   ver build.py::process. */
+function daily(fL,fM,fS,fAg){
+  const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,chk:0,leads:0,mqls:0,la:0,vendas:0,fat:0,receita:0,agendamentos:0,reunioes:0});
   fM.forEach(r=>{if(!r.d)return; const a=g(r.d); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv; a.chk+=r.ck||0;});
-  fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q;});
+  fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q; a.la+=r.a||0;});
   fS.forEach(r=>{if(!r.d)return; const a=g(r.d); a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.receita+=r.receita||0;});
+  (fAg||[]).forEach(r=>{if(!r.d)return; const a=g(r.d); a.agendamentos+=r.agendamentos||0; a.reunioes+=r.reunioes||0;});
   return Object.values(days).sort((a,b)=>a.d<b.d?-1:1);
 }
 
@@ -459,9 +484,9 @@ function comboChart(id, d){
     data:{labels, datasets:[
       {type:'bar',label:'Leads',data:d.map(x=>x.leads),backgroundColor:cLeads,yAxisID:'y',borderRadius:3,order:3},
       {type:'bar',label:'MQLs',data:d.map(x=>x.mqls),backgroundColor:cMqls,yAxisID:'y',borderRadius:3,order:3},
-      {type:'line',label:'Gasto',data:d.map(x=>+(x.sp*taxf()).toFixed(2)),borderColor:cGasto,backgroundColor:cGasto,yAxisID:'y1',borderWidth:2,pointRadius:2,tension:.25,order:1},
-      {type:'line',label:'CPL',data:d.map(x=>x.leads?+((x.sp*taxf())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
-      {type:'line',label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*taxf())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
+      {type:'line',label:'Gasto',data:d.map(x=>+(x.sp*taxf()*curF()).toFixed(2)),borderColor:cGasto,backgroundColor:cGasto,yAxisID:'y1',borderWidth:2,pointRadius:2,tension:.25,order:1},
+      {type:'line',label:'CPL',data:d.map(x=>x.leads?+((x.sp*taxf()*curF())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
+      {type:'line',label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*taxf()*curF())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{labels:{color:cink(),boxWidth:10,usePointStyle:true,font:{size:11}}},
@@ -491,8 +516,8 @@ function lineChart(id, d){
   const cCpmql=cvar('--chart-cpmql'), cCpl=cvar('--chart-cpl')||cink();
   charts[id]=new Chart(el,{type:'line',
     data:{labels,datasets:[
-      {label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*taxf())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
-      {label:'CPL',data:d.map(x=>x.leads?+((x.sp*taxf())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
+      {label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*taxf()*curF())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
+      {label:'CPL',data:d.map(x=>x.leads?+((x.sp*taxf()*curF())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{labels:{color:cink(),boxWidth:10,usePointStyle:true,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+brl(c.raw)}}},
@@ -537,7 +562,7 @@ function mqlByDimChart(id, fL, fM, agg, dim, selSet){
     const spDay={}, mqlDay={}; days.forEach(d=>{spDay[d]=0; mqlDay[d]=0;});
     fM.forEach(r=>{ if(r[dim]===mv && r.d!=null && spDay[r.d]!=null) spDay[r.d]+=r.sp; });
     fL.forEach(r=>{ if(r[dim]===mv && r.d!=null && mqlDay[r.d]!=null) mqlDay[r.d]+=r.q; });
-    const data=days.map(d=> mqlDay[d]>0 ? +((spDay[d]*taxf())/mqlDay[d]).toFixed(2) : null);
+    const data=days.map(d=> mqlDay[d]>0 ? +((spDay[d]*taxf()*curF())/mqlDay[d]).toFixed(2) : null);
     const col=pal[idx%pal.length];
     return {label:String(mv), data, borderColor:col, backgroundColor:col, borderWidth:2, pointRadius:2, tension:.25, spanGaps:true};
   });
@@ -585,8 +610,8 @@ const GERAL_IDS={funnel:'geralFunnel',kpis2:'geralKpis2',combo:'gCombo',source:'
 const REL_IDS  ={funnel:'relFunnel', kpis2:'relKpis2', combo:'rCombo',source:'rSource',bucket:'rBucket',plat:'rPlat',prof:'rProf',daily:'rDaily'};
 function renderGeral(){ renderGeralCore(GERAL_IDS); }
 function renderGeralCore(ids){
-  const fL=leadsActive(), fM=metaActive(), fS=salesActive();
-  const t=totals(fL,fM,fS), dv=derive(t), g=dv.gasto;
+  const fL=leadsActive(), fM=metaActive(), fS=salesActive(), fAg=agdActive();
+  const t=totals(fL,fM,fS,fAg), dv=derive(t), g=dv.gasto;
   const leadsAds=fL.filter(l=>l.src==='meta'||l.src==='google');
   const nAds=leadsAds.length, mqlsAds=leadsAds.reduce((s,r)=>s+r.q,0);
   const nOrg=fL.filter(l=>l.src==='org').length;
@@ -599,26 +624,32 @@ function renderGeralCore(ids){
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
     ['Leads', intf(t.leads), [['CPL',brl(dv.cpl)],['ConvLP',pct(dv.convlp)]]],
-    ['MQLs (Médicos)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    // MQL e Lead A lado a lado — Lead A é métrica PARALELA (mais qualificada
+    // ainda), nunca substitui o MQL. A:MQL = Lead A / MQL.
+    ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
+    ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
+    ['Reuniões Realizadas', s.reunioes!=null?intf(s.reunioes):NA, [['No‑show',s.txnoshow!=null?pct(s.txnoshow):NA],['CPRR',s.cprr!=null?brl(s.cprr):NA]], s.reunioes==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvMQL',s.convmql!=null?pct(s.convmql):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
     ['Receita', s.receita!=null?brl(s.receita):NA, [['ROAS',s.roasReceita!=null?numf(s.roasReceita):NA],['Ticket',s.tmReceita!=null?brl(s.tmReceita):NA]], s.receita==null, 'hl-fat'],
     ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
   ];
   document.getElementById(ids.funnel).innerHTML=funnelHTML(steps);
   // ---- Mar05: métricas secundárias mais úteis (não repetem o funil) ----
-  const dd=daily(fL,fM,fS), nDays=dd.length||1;
+  const dd=daily(fL,fM,fS,fAg), nDays=dd.length||1;
   const adAgg=buildAgg(fL,fM,fS,'ad');
   let topAd=null, bestAd=null, nAdsAtivos=0;
   Object.entries(adAgg).forEach(([ad,a])=>{
     if(a.sp>0) nAdsAtivos++;
     if(topAd==null||a.mqls>topAd.m) topAd={ad,m:a.mqls};
-    if(a.mqls>0){ const cq=(a.sp*taxf())/a.mqls; if(bestAd==null||cq<bestAd.v) bestAd={ad,v:cq}; }
+    if(a.mqls>0){ const cq=(a.sp*taxf()*curF())/a.mqls; if(bestAd==null||cq<bestAd.v) bestAd={ad,v:cq}; }
   });
   const nCampAtivas=Object.values(buildAgg(fL,fM,fS,'camp')).filter(a=>a.sp>0).length;
   const concTop=(t.mqls&&topAd)?topAd.m/t.mqls:null;
   const adShort=s=>{ s=String(s||'—'); return s.length>22?s.slice(0,21)+'…':s; };
   const k2=[
     {label:'MQLs por dia (média)',val:numf(t.mqls/nDays),aux:numf(t.leads/nDays)+' leads/dia'},
+    {label:'Leads A por dia (média)',val:numf(dv.la/nDays),aux:'A:MQL '+(dv.amql!=null?nf2.format(dv.amql):'-')},
     {label:'Melhor CPMQL (anúncio)',val:bestAd?brl(bestAd.v):'-',aux:bestAd?adShort(bestAd.ad):'—'},
     {label:'Top anúncio (MQLs)',val:topAd?intf(topAd.m):'-',aux:topAd?adShort(topAd.ad):'—'},
     {label:'Concentração top anúncio',val:pct(concTop),aux:'% dos MQLs no melhor anúncio'},
@@ -628,12 +659,13 @@ function renderGeralCore(ids){
     {label:'Proporção Org:Ads',val:nOrg?numf(nAds/nOrg)+':1':(nAds?'∞':'-'),aux:'Ads por orgânico'},
   ];
   document.getElementById(ids.kpis2).innerHTML=k2.map(kpiCard).join('');
-  comboChart(ids.combo, daily(fL,fM,fS));
+  comboChart(ids.combo, daily(fL,fM,fS,fAg));
   // por origem
   const srcName={meta:'Meta Ads',google:'Google Ads',org:'Orgânico',outros:'Outros'};
   const bySrc={}; fL.forEach(l=>{const k=srcName[l.src]||l.src; bySrc[k]=(bySrc[k]||0)+1;});
   hbar(ids.source, Object.entries(bySrc).map(([label,leads])=>({label,leads})), x=>x.leads, ()=>cvar('--chart-leads'));
-  // por especialidade (verde = leads médicos, cinza = não-médicos; "Sem resposta" sempre por último)
+  // por Funil (Thata: sem coluna de especialidade nesta planilha — usamos a
+  // coluna "Funil" da Central de Leads como dimensão; verde = MQL, cinza = não)
   const byB={}; fL.forEach(l=>{byB[l.bucket]=byB[l.bucket]||{label:l.bucket,leads:0,q:l.q}; byB[l.bucket].leads++;});
   const bArr=Object.values(byB).sort((a,b)=>(a.label==='Sem resposta')-(b.label==='Sem resposta')||b.leads-a.leads);
   hbar(ids.bucket, bArr, x=>x.leads, x=>x.q?cvar('--bar-q'):cvar('--bar-noq'));
@@ -641,11 +673,11 @@ function renderGeralCore(ids){
   const platName={ig:'Instagram',fb:'Facebook','—':'Orgânico/—'};
   const byP={}; fL.forEach(l=>{const k=platName[l.plat]||l.plat; byP[k]=(byP[k]||0)+1;});
   hbar(ids.plat, Object.entries(byP).map(([label,leads])=>({label,leads})), x=>x.leads, ()=>cvar('--chart-leads'));
-  // por profissao (top 10)
+  // por Página (Thata: sem coluna de profissão — usamos a coluna "Página" da Central de Leads; top 10)
   const byPr={}; fL.forEach(l=>{byPr[l.prof]=(byPr[l.prof]||0)+1;});
   hbar(ids.prof, Object.entries(byPr).map(([label,leads])=>({label,leads})), x=>x.leads, ()=>cvar('--chart-mqls'), 10);
   // tabela diaria (todos os leads), ultimo dia no topo + heatmap
-  const dl=daily(fL,fM,fS).slice().reverse();
+  const dl=daily(fL,fM,fS,fAg).slice().reverse();
   renderTable({id:ids.daily, cols:DAILY_COLS, center:true, fit:true,
     rows:dl.map(x=>{const d=derive(x); return {k:x.d, cells:dailyCells(x,d)};}),
     total:(()=>{const d=derive(t);return dailyCells({...t,d:null},d,true);})(),
@@ -749,6 +781,7 @@ function adRowCells(ad,a,struct){
   return {ad, camp:struct.camp, adset:struct.adset,
     gasto:d.gasto, im:a.im, cpm:d.cpm, ctr:d.ctr,
     leads:a.leads, cpl:d.cpl, mqls:a.mqls, tx:d.tx, cpmql:d.cpmql,
+    la:d.la, txa:d.txa, amql:d.amql, cpla:d.cpla,
     convmql:s.convmql, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas,
     link:adLinkCell(ad),
     _cpmql:d.cpmql, _cac:s.cac, status:null};   // valores crus p/ colorir vs meta
@@ -764,6 +797,8 @@ function relRenderAdTable(id,list){
     {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
     {key:'mqls',label:'MQLs',type:'int'},{key:'tx',label:'Tx‑MQL',type:'pct'},
     {key:'cpmql',label:'CPMQL',type:'brl'},
+    // Lead A: métrica PARALELA ao MQL — CPL‑A/Tx‑A/A:MQL
+    {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
     {key:'convmql',label:'ConvMQL',type:'pct'},
     {key:'vendas',label:'Vendas',type:'int'},
     {key:'cac',label:'CAC',type:'brl'},
@@ -890,9 +925,9 @@ function renderRelBrief(){
    "Em observação" — o pill do título mostra quantos são campeões DE quantos
    anúncios no total, pra não sugerir que 10 linhas = 10 vencedores. */
 function renderRelAds(){
-  const fL=leadsActive(), fM=metaActive(), fS=salesActive();
+  const fL=leadsActive(), fM=metaActive(), fS=salesActive(), fAg=agdActive();
   const struct=adStructMap(fM,fL);
-  const agg=buildAgg(fL,fM,fS,'ad');
+  const agg=buildAgg(fL,fM,fS,'ad',fAg);
   const pool=Object.entries(agg).filter(([ad,a])=>a.sp>0).map(([ad,a])=>({ad, a, struct:struct[ad]||{camp:'—',adset:'—'}}));
 
   const all=pool.slice().sort((x,y)=>{ const sx=adSampleOk(x.a), sy=adSampleOk(y.a);
@@ -944,7 +979,10 @@ const DAILY_COLS=[
   {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
   {key:'leads',label:'Leads',type:'int',heat:'leads'},{key:'cpl',label:'CPL',type:'brl'},
   {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int',heat:'mqls'},{key:'cpmql',label:'CPMQL',type:'brl'},
+  // Lead A: métrica PARALELA ao MQL (mais qualificado ainda) — CPL‑A/Tx‑A/A:MQL
+  {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
   {key:'chk',label:'Checkouts',type:'int'},{key:'vischk',label:'VisCHK',type:'pct'},
+  {key:'agd',label:'Agend.',type:'int'},{key:'reun',label:'Reun. Realiz.',type:'int'},
   {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
   {key:'fat',label:'Fat.',type:'brl'},{key:'receita',label:'Receita',type:'brl'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
 ];
@@ -953,6 +991,8 @@ function dailyCells(x,d,isTotal){
   return {date:isTotal?null:x.d, wd:isTotal?'':weekday(x.d), gasto:d.gasto, cpm:d.cpm, ctr:d.ctr, cr:d.cr, convlp:d.convlp,
     chk:d.chk, vischk:d.vischk,
     leads:x.leads, cpl:d.cpl, tx:d.tx, mqls:x.mqls, cpmql:d.cpmql,
+    la:d.la, txa:d.txa, amql:d.amql, cpla:d.cpla,
+    agd:s.agendamentos, reun:s.reunioes,
     convmql:s.convmql, vendas:s.vendas, cac:s.cac, fat:s.fat, receita:s.receita, roas:s.roas};
 }
 
@@ -960,11 +1000,11 @@ function dailyCells(x,d,isTotal){
 /* Mar04: considera TODOS os leads e TODO o gasto de todas as fontes de tráfego
    (sem filtrar por atribuição). Hoje só há Meta; quando vier google/tiktok/orgânico
    etc., já entram automaticamente. */
-function metaScope(ex){ let fL=leadsActive(), fM=metaActive(), fS=salesActive();
-  if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); fS=fS.filter(r=>STATE.mSelC.has(r.camp)); }
-  if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); fS=fS.filter(r=>STATE.mSelA.has(r.adset)); }
-  if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); fS=fS.filter(r=>STATE.mSelAd.has(r.ad)); }
-  return {fL,fM,fS}; }
+function metaScope(ex){ let fL=leadsActive(), fM=metaActive(), fS=salesActive(), fAg=agdActive();
+  if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); fS=fS.filter(r=>STATE.mSelC.has(r.camp)); fAg=fAg.filter(r=>STATE.mSelC.has(r.camp)); }
+  if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); fS=fS.filter(r=>STATE.mSelA.has(r.adset)); fAg=fAg.filter(r=>STATE.mSelA.has(r.adset)); }
+  if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); fS=fS.filter(r=>STATE.mSelAd.has(r.ad)); fAg=fAg.filter(r=>STATE.mSelAd.has(r.ad)); }
+  return {fL,fM,fS,fAg}; }
 /* selecao multipla: Ctrl adiciona (OR) sem sumir as demais linhas; clique simples troca a ancora */
 function selDim(dim,key,ctrl){
   const sets={C:STATE.mSelC,A:STATE.mSelA,D:STATE.mSelAd}, s=sets[dim];
@@ -974,8 +1014,8 @@ function selDim(dim,key,ctrl){
   renderMeta();
 }
 function renderMeta(){
-  const F=metaScope(null), fL=F.fL, fM=F.fM, fS=F.fS;   // KPIs, funil, graficos e tabela diaria
-  const t=totals(fL,fM,fS), dv=derive(t), g=dv.gasto;
+  const F=metaScope(null), fL=F.fL, fM=F.fM, fS=F.fS, fAg=F.fAg;   // KPIs, funil, graficos e tabela diaria
+  const t=totals(fL,fM,fS,fAg), dv=derive(t), g=dv.gasto;
   const NA='<span class="na-tag">sem dado</span>';
   const s=salesOf(t);
   const steps=[
@@ -984,14 +1024,17 @@ function renderMeta(){
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
     ['Leads', intf(t.leads), [['CPL',brl(dv.cpl)],['ConvLP',pct(dv.convlp)]]],
-    ['MQLs (Médicos)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
+    ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
+    ['Reuniões Realizadas', s.reunioes!=null?intf(s.reunioes):NA, [['No‑show',s.txnoshow!=null?pct(s.txnoshow):NA],['CPRR',s.cprr!=null?brl(s.cprr):NA]], s.reunioes==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvMQL',s.convmql!=null?pct(s.convmql):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
     ['Receita', s.receita!=null?brl(s.receita):NA, [['ROAS',s.roasReceita!=null?numf(s.roasReceita):NA],['Ticket',s.tmReceita!=null?brl(s.tmReceita):NA]], s.receita==null, 'hl-fat'],
     ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
   ];
   document.getElementById('metaFunnel').innerHTML=funnelHTML(steps);
 
-  comboChart('mCombo', daily(fL,fM,fS));
+  comboChart('mCombo', daily(fL,fM,fS,fAg));
   // Mar02: barras de MQLs por anúncio (não leads)
   const mqlByAd={}; fL.forEach(l=>{ mqlByAd[l.ad]=(mqlByAd[l.ad]||0)+l.q; });
   hbar('mMqlAd', Object.entries(mqlByAd).map(([label,leads])=>({label,leads})), x=>x.leads, ()=>cvar('--chart-mqls'), 10, 'MQLs');
@@ -1000,7 +1043,7 @@ function renderMeta(){
   // Compilado dos Anúncios (CAC/Fat/ROAS "-" até conectar compradores; ordena por CPMQL como proxy)
   const adAggM=buildAgg(fL,fM,fS,'ad');
   const topCacRows=Object.entries(adAggM).map(([ad,a])=>{const d=derive(a),s=salesOf(a);
-    return {k:ad, cells:{dim:ad,mqls:a.mqls,cpmql:d.cpmql,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas},
+    return {k:ad, cells:{dim:ad,mqls:a.mqls,cpmql:d.cpmql,la:d.la,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas},
       _ord:(s.cac!=null?s.cac:(d.cpmql!=null?d.cpmql:Infinity))};})
     .sort((a,b)=>a._ord-b._ord).slice(0,10);
   // sem fit: 7 colunas não cabem legíveis dividindo 1/3 da página (.trio) —
@@ -1008,11 +1051,11 @@ function renderMeta(){
   // (mesmo padrão das tabelas hierárquicas), em vez de espremer tudo.
   renderTable({id:'mTopCac', center:true,
     cols:[{key:'dim',label:'Anúncios',type:'dim',big:true},{key:'mqls',label:'MQLs',type:'int'},
-      {key:'cpmql',label:'CPMQL',type:'brl'},{key:'vendas',label:'Vendas',type:'int'},
+      {key:'cpmql',label:'CPMQL',type:'brl'},{key:'la',label:'Leads A',type:'int'},{key:'vendas',label:'Vendas',type:'int'},
       {key:'cac',label:'CAC',type:'brl'},{key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num'}],
     rows:topCacRows});
 
-  const dl=daily(fL,fM,fS).slice().reverse();
+  const dl=daily(fL,fM,fS,fAg).slice().reverse();
   renderTable({id:'tDaily', cols:DAILY_COLS, center:true, fit:true,
     rows:dl.map(x=>{const d=derive(x); return {k:x.d, cells:dailyCells(x,d)};}),
     total:(()=>{const d=derive(t);return dailyCells({...t,d:null},d,true);})(),
@@ -1032,24 +1075,27 @@ function renderMeta(){
     {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
     {key:'tx',label:'Tx‑MQL',type:'pct'},
     {key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
+    {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
     {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Fat.',type:'brl'},{key:'receita',label:'Receita',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
   ];
   function hierRows(map){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
+      la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
       convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,receita:s.receita,roas:s.roas}};}); }
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
+    la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
     convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,receita:s.receita,roas:s.roas};}
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
   const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad');
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
   // tem largura automática p/ caber o nome INTEIRO por padrão, nunca quebra linha,
   // é redimensionável (arrastar borda) e 2 cliques na borda auto-ajusta (Sheets/Looker).
-  renderTable({id:'tCamp', cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fS)),
+  renderTable({id:'tCamp', cols:hcols.map((c,i)=>i===0?{...c,label:'Campanha'}:c), rows:hierRows(aggC), total:totRowOf(totals(Sc.fL,Sc.fM,Sc.fS,Sc.fAg)),
     selectable:true, selSet:STATE.mSelC, onSelect:(k,e)=>selDim('C',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAdset', cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fS)),
+  renderTable({id:'tAdset', cols:hcols.map((c,i)=>i===0?{...c,label:'Conjunto',big:true}:c), rows:hierRows(aggA), total:totRowOf(totals(Sa.fL,Sa.fM,Sa.fS,Sa.fAg)),
     selectable:true, selSet:STATE.mSelA, onSelect:(k,e)=>selDim('A',k,e&&(e.ctrlKey||e.metaKey))});
-  renderTable({id:'tAd', cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fS)),
+  renderTable({id:'tAd', cols:hcols.map((c,i)=>i===0?{...c,label:'Anúncio'}:c), rows:hierRows(aggD), total:totRowOf(totals(Sd.fL,Sd.fM,Sd.fS,Sd.fAg)),
     selectable:true, selSet:STATE.mSelAd, onSelect:(k,e)=>selDim('D',k,e&&(e.ctrlKey||e.metaKey))});
 
   // Mar03/Mar10: cada gráfico varia a dimensão da sua tabela — MQLs por dia, 1 linha
@@ -1175,6 +1221,16 @@ document.getElementById('themeBtn').addEventListener('click',()=>{ const dark=do
 
 document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setPage(n.dataset.page)));
 document.getElementById('taxToggle').addEventListener('click',function(){ STATE.tax=!STATE.tax; this.classList.toggle('on',STATE.tax); renderAll(); });
+/* toggle de moeda BRL/USD — mesmo padrão do toggle de imposto acima. Gasto do
+   Meta Ads é nativo em USD (meta[].sp); "on" = BRL (multiplica pela cotação
+   B.usd_brl_rate), "off" = USD nativo. */
+(function wireCurrencyToggle(){
+  const el=document.getElementById('currencyToggle'); if(!el) return;
+  const label=el.querySelector('.toggle-label');
+  const sync=()=>{ el.classList.toggle('on',STATE.currency==='BRL'); if(label) label.textContent='Moeda: '+STATE.currency; };
+  sync();
+  el.addEventListener('click',function(){ STATE.currency=STATE.currency==='BRL'?'USD':'BRL'; sync(); renderAll(); });
+})();
 /* seletor de período: abre/fecha popover, aplicar/cancelar, fechar ao clicar fora/Esc */
 document.getElementById('periodBtn').addEventListener('click',e=>{ e.stopPropagation(); ppIsOpen()?ppClose():ppOpen(); });
 document.getElementById('ppApply').addEventListener('click',ppApply);

@@ -73,32 +73,34 @@ os Insights.
 
 ## Contexto do funil
 
-**Funil de High Ticket (<<PREENCHER: nome do cliente>>)** — <<PREENCHER: descrição
-curta do cliente/oferta>>. Funil de captura via WhatsApp com venda 1:1 (comercial
-fecha por conversa/reunião, não carrinho direto): o anúncio no Meta Ads leva
-a uma página de captura com botão do WhatsApp; ao clicar, o lead chama no
-WhatsApp Business do cliente e o webhook de mensageria dispara na 1ª mensagem,
-que cai na aba **Conversas** (fonte principal de leads deste dashboard). O
-critério de qualificação (MQL) é <<PREENCHER: critério de MQL do cliente, ex.
-"o lead ser médico">> — se qualificado, segue a conversa com o comercial até a
-venda (registrada na aba de Compradores e cruzada de volta ao anúncio por telefone).
+**Funil "Sessão Estratégica" (Thata Junqueira — "Sala Secreta")**. Funil de
+captação via anúncio → página de captura → **Central de Leads** (fonte
+principal deste dashboard, aba própria de uma planilha separada da de
+mídia paga). O lead qualificado agenda uma **Sessão Estratégica** (aba
+**Agendamentos**, Calendly) com a consultora; se comparece e fecha, a venda
+cai na aba **Compradores** e é cruzada de volta ao anúncio de origem por
+**telefone ou e-mail**.
 
 ```
-Impressões → Cliques/abertura do WhatsApp → Leads → MQLs → Vendas → Faturamento
+Impressões → Cliques → Leads → MQLs / Leads A → Agendamentos → Reuniões Realizadas → Vendas → Faturamento
 ```
 
-- **MQL** = coluna de qualificação (<<PREENCHER: nome da coluna de MQL>>) == "Sim" (ver `build.py` → `is_medico`).
-- **Agendamento** = o lead qualificado marcou horário de reunião com o comercial.
+- **MQL** = coluna `Qualificação` (Central de Leads) == `"qualificado"` (ver `build.py` → `is_mql`).
+- **Lead A** = coluna `Lead Scoring` == `"A"` — subconjunto MAIS qualificado que
+  o MQL, métrica **paralela** (nunca substitui o MQL; ver `build.py` → `is_lead_a`).
+  Só preenchida a partir de 03/08/2026. Some ao lado do MQL em todo o funil/tabelas,
+  com a proporção **A:MQL**.
+- **Agendamento** = o lead marcou horário de Sessão Estratégica com a consultora.
 - **Reunião Realizada** = a reunião de fato aconteceu (o lead compareceu). O
   inverso disso é o **No‑Show** (agendou e não compareceu) — a métrica de alerta
   mais importante entre Agendamento e Venda.
 
-> **Estado atual dos dados:** enquanto só houver mídia paga × Leads, o funil
-> vai até **MQL**. As etapas seguintes (Agendamentos, Reuniões Realizadas, Vendas,
-> Faturamento) e as métricas derivadas aparecem como “-” até chegar a lista do
-> comercial/vendas. Quando os campos `agendamentos`/`reunioes`/`vendas`/
-> `fat` forem somados por linha em `buildAgg/daily/totals` (`build/app.js`),
-> **toda a UI acende sozinha** (funil, tabelas, Top/Piores).
+> **Estado atual dos dados:** para este cliente, Agendamentos e Reuniões
+> Realizadas JÁ vêm da aba Agendamentos (Calendly), cruzada por telefone/e-mail
+> com a Central de Leads — não ficam mais como "-" por padrão. Se o cruzamento
+> falhar para uma linha específica (telefone e e-mail divergentes de todo lead
+> conhecido), aquele agendamento/venda ainda entra nos totais, só sem anúncio de
+> origem ("(sem campanha)").
 
 ## Fórmulas fundamentais
 
