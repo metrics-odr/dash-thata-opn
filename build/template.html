@@ -17,18 +17,18 @@
 <input type="checkbox" id="navToggle">
 <div id="app">
   <aside class="sidebar">
-    <div class="logo"><div class="logo-main">Thata Junqueira</div><div class="logo-sub">Sala Secreta</div></div>
+    <div class="logo"><div class="logo-main">Thata Junqueira</div><div class="logo-sub">Sessão Estratégica</div></div>
     <div class="sec">Dashboards</div>
-    <div class="nav-item active" data-page="geral"><span class="ic">◱</span> Visão Geral de Leads</div>
-    <div class="nav-item" data-page="meta"><span class="ic">◨</span> Captura Meta Ads</div>
-    <div class="nav-item" data-page="rel"><span class="ic">▤</span> Relatório</div>
+    <div class="nav-item active" data-page="geral"><span class="ic">◱</span> Visão Geral</div>
+    <div class="nav-item" data-page="meta"><span class="ic">◨</span> Meta Ads</div>
+    <div class="nav-item" data-page="rel"><span class="ic">▤</span> Insights de IA</div>
     <div class="foot">Somente leitura · atualiza ~30 min<br><span id="buildFoot"></span></div>
   </aside>
 
   <div class="main-area">
     <div class="topbar">
       <label class="ham" for="navToggle" title="Menu">☰</label>
-      <div class="ptitle" id="ptitle">Visão Geral de Leads</div>
+      <div class="ptitle" id="ptitle">Visão Geral</div>
       <div class="sep"></div>
       <div class="period-picker" id="periodPicker">
         <button class="btn period-btn" id="periodBtn" aria-haspopup="true" aria-expanded="false">
@@ -58,7 +58,11 @@
       <div class="sep"></div>
       <div class="tax-toggle on" id="taxToggle"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-label">Imposto Meta</span></div>
       <div class="currency-wrap">
-        <div class="tax-toggle on" id="currencyToggle" title="Alternar entre BRL e USD (Gasto e Faturamento líquido são nativos em USD)"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-label">Moeda: BRL</span></div>
+        <span class="cur-label">Moeda</span>
+        <div class="cur-toggle" id="currencyToggle" title="Alternar entre BRL e USD (Gasto e Faturamento líquido são nativos em USD)">
+          <button type="button" class="cur-opt" data-cur="USD"><span class="cur-flag">🇺🇸</span> USD</button>
+          <button type="button" class="cur-opt" data-cur="BRL"><span class="cur-flag">🇧🇷</span> BRL</button>
+        </div>
         <span class="fx-rate" id="fxRate"></span>
       </div>
       <div class="spacer"></div>
@@ -158,9 +162,11 @@
             <p class="rel-sub" id="relPeriodRange"></p>
           </div>
           <div class="rel-legend">
-            <span class="rel-legend-lbl">Amostra do anúncio:</span>
-            <span class="rel-chip c-green">Avaliável</span>
-            <span class="rel-chip c-yellow">Em observação</span>
+            <span class="rel-legend-lbl">Status do anúncio:</span>
+            <span class="rel-chip c-green">Escalar</span>
+            <span class="rel-chip c-blue">Manter</span>
+            <span class="rel-chip c-yellow">Observar</span>
+            <span class="rel-chip c-red">Cortar</span>
           </div>
         </div>
 
@@ -207,7 +213,7 @@
         <h2 class="sec-title">Top Anúncios <span class="pill q" id="relTopCount"></span></h2>
         <div class="card" style="padding:0">
           <div class="tbl-wrap"><table class="dt rel-adt" id="relTop"></table></div>
-          <p class="note" style="padding:10px 15px">Ranqueados pelo resultado mais profundo disponível (Vendas → Reuniões Realizadas → Agendamentos → MQLs) com custo saudável e <b>amostra relevante</b>. Anúncios promissores sem amostra suficiente aparecem como <b>Em observação</b>. Link abre o criativo no Instagram em nova aba. Rolagem lateral dentro da tabela.</p>
+          <p class="note" style="padding:10px 15px">Ranqueados pelo resultado mais profundo disponível (Vendas → Reuniões Realizadas → Agendamentos → MQLs). Status vs. metas de CPMQL/CAC: <b>Escalar</b> (dentro da meta) · <b>Manter</b> (até +30%) · <b>Cortar</b> (acima do teto) · <b>Observar</b> (sem amostra relevante ainda). Ícone de olho (Prévia) abre o criativo no Instagram em nova aba. Rolagem lateral dentro da tabela.</p>
         </div>
 
 

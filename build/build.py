@@ -528,24 +528,31 @@ def read_sales(sales_rows, phone_attrib, email_attrib):
 def read_meta(meta_rows):
     """Lê a planilha "Meta Ads" (aba única). Colunas:
     Day, Campaign Name, Ad Set Name, Ad Name, Amount Spent, Impressions,
-    Link Clicks, Landing Page Views, Leads, 3-Second Video Views, Creative
-    Instagram Permalink.
+    Link Clicks, Landing Page Views, Leads, 3-Second Video Views, Video Views
+    de 50%, Ad Status, Creative Instagram Permalink.
     "Amount Spent" é NATIVO EM USD — gravado como está em meta[].sp; a
     conversão pro toggle de moeda acontece no app.js (client-side).
     Sem colunas de "Adds to Cart"/Checkout nesta conta — chk fica sempre 0
-    ("-" no front, sem proxy de checkout disponível)."""
+    ("-" no front, sem proxy de checkout disponível).
+    "3-Second Video Views"/"Video Views de 50%" alimentam HR (Hook Rate) e BR
+    (Body Rate) na tabela Top Anúncios (aba Relatório), calculados no app.js.
+    "Ad Status" (ACTIVE/PAUSED) vira o badge de status do anúncio (ad_status)."""
     header = meta_rows[0] if meta_rows else []
     idx = header_index(
         header,
         {"day": ["day"], "campaign": ["campaign name"], "adset": ["ad set name"],
          "ad": ["ad name"], "spent": ["amount spent"], "impr": ["impressions"],
          "clicks": ["link clicks"], "leads": ["leads"], "pv": ["landing page views"],
+         "vv3": ["3-second video views", "3 second video views"],
+         "vv50": ["video views de 50%", "50% video views", "video views (50%)"],
+         "adstatus": ["ad status"],
          "link": ["creative instagram permalink", "instagram permalink", "permalink"]},
         {"day": 0, "campaign": 1, "adset": 2, "ad": 3, "spent": 4, "impr": 5,
-         "clicks": 6, "pv": 7, "leads": 8, "link": 10},
+         "clicks": 6, "pv": 7, "leads": 8, "vv3": 9, "vv50": 10, "adstatus": 11, "link": 12},
     )
     meta = []
     ad_links = {}
+    ad_status = {}
     for row in meta_rows[1:]:
         if not any((c or "").strip() for c in row):
             continue
@@ -553,6 +560,9 @@ def read_meta(meta_rows):
         link = cell(row, idx["link"])
         if link and ad not in ad_links:
             ad_links[ad] = link
+        status = cell(row, idx["adstatus"])
+        if status and ad not in ad_status:
+            ad_status[ad] = status
         meta.append({
             "d": parse_date(cell(row, idx["day"])),
             "camp": cell(row, idx["campaign"]) or "(sem campanha)",
@@ -564,8 +574,10 @@ def read_meta(meta_rows):
             "pv": to_float(cell(row, idx["pv"])),
             "ck": 0.0,   # sem proxy de checkout nesta conta
             "ml": to_float(cell(row, idx["leads"])),
+            "v3": to_float(cell(row, idx["vv3"])),
+            "v50": to_float(cell(row, idx["vv50"])),
         })
-    return meta, ad_links
+    return meta, ad_links, ad_status
 
 
 # --------------------------------------------------------------------------- #
@@ -573,7 +585,7 @@ def read_meta(meta_rows):
 # --------------------------------------------------------------------------- #
 def process(leads_rows, meta_rows, agendamentos_rows, sales_rows):
     leads, phone_attrib, email_attrib = read_leads(leads_rows)
-    meta, ad_links = read_meta(meta_rows)
+    meta, ad_links, ad_status = read_meta(meta_rows)
     agendamentos = read_agendamentos(agendamentos_rows, phone_attrib, email_attrib) if agendamentos_rows else []
     sales = read_sales(sales_rows, phone_attrib, email_attrib) if sales_rows else []
 
@@ -607,6 +619,7 @@ def process(leads_rows, meta_rows, agendamentos_rows, sales_rows):
         "sales": sales,
         "agendamentos": agendamentos,
         "ad_links": ad_links,
+        "ad_status": ad_status,
         "briefings": {},
     }
 

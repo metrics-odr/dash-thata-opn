@@ -86,8 +86,15 @@
   .tax-toggle.on .toggle-thumb{left:18px}
   .toggle-label{font-size:12.5px; color:var(--muted)}
   .tax-toggle.on .toggle-label{color:var(--accent-blue); font-weight:600}
-  .currency-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:2px}
+  .currency-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:3px}
+  .cur-label{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding-left:1px}
   .fx-rate{font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; padding-left:1px}
+  /* seletor de moeda: 2 opções lado a lado (USD/BRL), estilo pill/segmented */
+  .cur-toggle{display:inline-flex; border:1px solid var(--border); border-radius:999px; padding:2px; background:var(--bg); gap:2px}
+  .cur-opt{border:0; background:transparent; color:var(--muted); border-radius:999px; padding:5px 11px; font-size:12.5px;
+    cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+  .cur-opt .cur-flag{font-size:13px; line-height:1}
+  .cur-opt.active{background:var(--accent-blue); color:#fff; font-weight:600}
 
   /* ---------- Page content ---------- */
   .page-content{padding:24px 24px 60px}
@@ -248,6 +255,7 @@
   .rel-legend-lbl{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em}
   .rel-chip{font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid var(--border)}
   .rel-chip.c-green{color:var(--good); background:color-mix(in srgb,var(--good) 12%,transparent)}
+  .rel-chip.c-blue{color:var(--accent-blue); background:color-mix(in srgb,var(--accent-blue) 12%,transparent)}
   .rel-chip.c-yellow{color:var(--yellow); background:color-mix(in srgb,var(--yellow) 16%,transparent)}
   .rel-chip.c-red{color:var(--bad); background:color-mix(in srgb,var(--bad) 12%,transparent)}
 
@@ -272,55 +280,33 @@
   .mc-lg.mc-yellow{color:var(--yellow); background:color-mix(in srgb,var(--yellow) 18%,transparent)}
   .mc-lg.mc-red{color:var(--bad); background:color-mix(in srgb,var(--bad) 15%,transparent)}
 
-  /* tabela Top Anúncios: mesmo motor das tabelas hierárquicas (colunas de texto
-     com largura automática p/ caber o nome INTEIRO, redimensionável, ordenável).
-     Anúncio e Link ficam FIXOS (position:sticky) nas bordas — sempre visíveis,
-     sem precisar rolar — só as colunas do meio rolam lateralmente (dentro da
-     própria tabela, nunca a página). */
-  table.dt.rel-adt tbody tr{cursor:default}
-  table.dt.rel-adt .stk-l1, table.dt.rel-adt .stk-r{position:sticky; z-index:1; background:var(--surface)}
-  table.dt.rel-adt thead .stk-l1, table.dt.rel-adt thead .stk-r{z-index:3; background:var(--thead)}
-  table.dt.rel-adt tfoot .stk-l1, table.dt.rel-adt tfoot .stk-r{position:sticky; z-index:1; background:var(--tfoot)}
-  table.dt.rel-adt .stk-l1{left:0; border-right:1px solid var(--border)}
-  table.dt.rel-adt .stk-r{right:0; border-left:1px solid var(--border)}
+  /* Colunas STICKY (dim/gasto à esquerda, link/prévia à direita): tabela Top
+     Anúncios (Relatório) e tabelas hierárquicas Campanha/Conjunto/Anúncio
+     (Captura Meta Ads) usam o MESMO mecanismo — 1 única <table>, colunas
+     marcadas cfg.cols[i].stk==='l'|'r' em app.js recebem position:sticky com
+     left/right calculado em JS (soma das larguras das colunas sticky
+     anteriores — ver stkOffsets em renderTable). Só 1 container de scroll
+     nativo (a própria tabela/.tbl-wrap): sem sincronizar múltiplas tabelas
+     via JS, então nada desalinha durante o scroll. .stk-edge marca a última
+     coluna de cada lado (fronteira com o miolo que rola) — só ela leva borda. */
+  table.dt .stk-l, table.dt .stk-r{position:sticky; z-index:1; background:var(--surface)}
+  table.dt thead .stk-l, table.dt thead .stk-r{z-index:3; background:var(--thead)}
+  table.dt tfoot .stk-l, table.dt tfoot .stk-r{position:sticky; z-index:1; background:var(--tfoot)}
+  table.dt .stk-l.stk-edge{border-right:1px solid var(--border)}
+  table.dt .stk-r.stk-edge{border-left:1px solid var(--border)}
 
-  /* tabelas hierárquicas (Campanha/Conjunto/Anúncio): 3 <table> independentes
-     lado a lado (esquerda fixa · meio com scroll próprio · direita fixa —
-     renderSplitTable em app.js). Cada seção rola VERTICALMENTE por conta
-     própria (max-height igual ao do .tbl-wrap ancestral, aplicado inline por
-     seção + overflow-y:auto aqui) — sticky nativo do thead/tfoot funciona sem
-     ressalva alguma dentro de cada uma, e um listener de scroll em app.js
-     sincroniza as 3. Barra de rolagem vertical só aparece na seção do meio
-     (as fixas escondem a própria); cabendo tudo em qualquer seção, ela
-     simplesmente não aparece e fica idêntico a uma tabela única. */
-  .dt-split{display:flex; align-items:flex-start; min-width:100%}
-  .dt-split table.dt{min-width:0; width:auto}
-  .dt-split-fixed{flex:0 0 auto; overflow-y:auto; overflow-x:hidden; scrollbar-width:none}
-  .dt-split-fixed::-webkit-scrollbar{display:none}
-  .dt-split-scroll{flex:1 1 160px; min-width:100px; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--border) transparent}
-  .dt-split-scroll::-webkit-scrollbar{height:7px; width:7px}
-  .dt-split-scroll::-webkit-scrollbar-track{background:transparent}
-  .dt-split-scroll::-webkit-scrollbar-thumb{background:var(--border); border-radius:999px}
-  .dt-split-l table{border-right:1px solid var(--border)}
-  .dt-split-r table{border-left:1px solid var(--border)}
-  /* ALINHAMENTO das 3 seções: altura de linha FIXA e inteira (px), igual em
-     todas. Sem isso a altura da linha fica fracionária (line-height:normal,
-     que varia com a métrica da fonte de cada seção) e o arredondamento em
-     tela acumula linha a linha — as bordas das seções saem de fase e a
-     tabela vira um "degrau". Com altura inteira idêntica, as 3 seções sempre
-     desenham a mesma linha na mesma altura. */
-  .dt-split table.dt th, .dt-split table.dt td{
-    box-sizing:border-box; height:31px; line-height:17px; padding-top:0; padding-bottom:0}
-  .dt-split table.dt thead th{height:31px}
-  .dt-split table.dt tfoot td{height:33px}
-  /* hover da linha inteira nas 3 seções em sincronia — ver JS (renderSplitTable);
-     desativa o :hover nativo (só pegaria a seção sob o cursor) em favor da
-     classe .hover-row, aplicada às 3 ao mesmo tempo. */
-  .dt-split table.dt tbody tr:hover{background:transparent}
-  .dt-split table.dt tbody tr.hover-row{background:var(--accent-blue-light)}
+  table.dt.rel-adt tbody tr{cursor:default}
   .rel-adlink{font-size:12px; font-weight:600; color:var(--accent-blue); text-decoration:none; white-space:nowrap}
   .rel-adlink:hover{text-decoration:underline}
   .rel-adlink.off{color:var(--muted); font-weight:400}
+
+  /* badge Ativo/Pausado (Ad Status do Meta Ads) e ícone de Prévia (tabela
+     "Anúncios" — Captura Meta Ads) */
+  .ad-status{display:inline-block; font-size:10.5px; font-weight:600; padding:2px 9px; border-radius:999px; white-space:nowrap}
+  .ad-status.on{color:var(--good); background:color-mix(in srgb,var(--good) 14%,transparent)}
+  .ad-status.off{color:var(--muted); background:color-mix(in srgb,var(--muted) 16%,transparent)}
+  .ad-preview{font-size:15px; text-decoration:none; line-height:1}
+  .ad-preview.off{color:var(--muted); font-size:12px}
 
   /* briefing do gestor */
   .rel-brief{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 22px; line-height:1.6; font-size:13.5px}

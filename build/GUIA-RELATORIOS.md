@@ -1,5 +1,8 @@
 # GUIA — Insights de Tráfego da aba Relatório
 
+> Nota: no menu do site (sidebar) esta página aparece como **"Insights de IA"**
+> (id interno `rel`, arquivo/guia continuam chamando-a de "aba Relatório").
+>
 > Texto lido de `build/relatorios.json` pela aba **Relatório** (seção "Insights
 > de Tráfego"). **Não faz nenhuma chamada de API no build nem no navegador** —
 > a página só exibe o texto já pronto. Os números vêm dos mesmos dados do site
@@ -164,13 +167,14 @@ Ao ver um deles ruim, aponte a **etapa** que perdeu eficiência — não recomen
 ## Top Anúncios e Piores Anúncios (o que a tabela já faz)
 
 A aba calcula sozinha, por anúncio (com gasto no período):
-- **Top**: ranqueado pelo **resultado mais profundo disponível** (Venda → Reunião
+- Ranqueado pelo **resultado mais profundo disponível** (Venda → Reunião
   Realizada → Agendamento → MQL), maior volume + menor custo, **amostra relevante primeiro**.
-  Anúncio promissor **sem amostra suficiente** entra marcado **"Em observação"** —
-  nunca é "vencedor" só por 1 resultado com pouco gasto.
-- **Piores**: só anúncios com **investimento relevante** e resultado profundo
-  fraco / custo pior que a média; **nunca** por CTR/CPM/CPL isolados. Sem amostra
-  suficiente → **"Em observação"**, não "ruim".
+- **Status** (coluna própria, vs. metas de CPMQL/CAC do painel): **Escalar** (verde,
+  dentro da meta) · **Manter** (azul, até +30% da meta) · **Cortar** (vermelho, acima
+  do teto) · **Observar** (amarelo, sem amostra suficiente ainda — nunca é "ruim",
+  só falta volume pra julgar).
+- **HR** (Hook Rate = 3‑Second Video Views/Impressions) e **BR** (Body Rate = Video
+  Views 50%/Impressions) — retenção do criativo nos primeiros segundos/metade do vídeo.
 - Limiares em `build.py`: `SAMPLE_MIN_SPEND`, `SAMPLE_MIN_MQLS`, `TOP_ADS_N`.
 - **Link** abre o criativo (coluna opcional de permalink na aba de mídia →
   `ad_links`).
