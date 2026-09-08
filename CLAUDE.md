@@ -215,10 +215,13 @@ como **fallback manual**. Limitação conhecida: usa os defaults de `build.py`
 (`META_CPMQL`/`META_CAC`/`VOLUME_MIN_AMOSTRAL`/`N_DIAS_CORTE`), não o que o gestor
 editou no painel (fica em `localStorage`).
 
-Funil completo: `Impressões → Cliques → Leads → MQLs → Agendamentos → Reuniões
-Realizadas → Vendas → Faturamento`. Enquanto só houver mídia paga × Leads, o funil
-vai até MQL; Agendamentos/Reuniões/Vendas/Fat aparecem "-" até chegar a lista do
-comercial.
+Funil completo: `Impressões → Cliques → Leads → MQLs → Agendamentos → Vendas →
+Faturamento`. Enquanto só houver mídia paga × Leads, o funil vai até MQL;
+Agendamentos/Vendas/Fat aparecem "-" até chegar a lista do comercial. Reuniões
+Realizadas não tem card/coluna na UI (removido por não ter fonte de dados
+neste cliente), mas a lógica de tier em `adQuality()` (`app.js`) continua
+existindo internamente para o ranking de Top/Piores Anúncios, caso essa fonte
+apareça no futuro.
 
 ### Link do criativo (aba de mídia paga)
 `build.py` lê uma coluna opcional de permalink do criativo na aba de mídia →
@@ -257,10 +260,12 @@ Três **páginas separadas** (sidebar):
 3. **Relatório** — espelha a Visão Geral + painel de Metas editável + Top/Piores
    Anúncios (17 colunas + Status) + Insights de Tráfego. Ver `build/GUIA-RELATORIOS.md`.
 
-**Ordem das colunas nas tabelas:** `Data · Dia · Gasto · CPM · CTR · ConvForm · Leads ·
-CPL · Tx‑MQL · MQLs · CPMQL · ConvMQL · Vendas · CAC · Fat. · Receita · ROAS`. Nas
-tabelas diárias entram também **Checkouts** e **VisCHK** (da coluna "Adds to Cart"
-do Meta Ads, proxy de Checkout). Sem essas colunas, ficam "-".
+**Ordem das colunas nas tabelas:** `Data · Dia · Gasto · CPM · CTR · CR · ConvLP ·
+Leads · CPL · Tx‑MQL · MQLs · CPMQL · Leads A · Tx‑A · A:MQL · CPL‑A · ConvMQL ·
+Vendas · CAC · Fat. · ROAS` (ver `DAILY_COLS`/`hcols` em `app.js`). Não há mais
+colunas de Checkouts/VisCHK/Agend./Reun. Realiz./Receita — removidas por não
+terem fonte de dados útil neste cliente (Meta Ads sem "Adds to Cart"; Receita
+era redundante com Faturamento).
 
 **Regras obrigatórias das tabelas** (ver `GUIA-REPLICACAO.md`): cabeçalho sticky;
 ordenação tri‑state; colunas redimensionáveis (persist localStorage); linha
@@ -269,7 +274,8 @@ filtro cruzado bidirecional; tabela diária com último dia no topo; heatmap de 
 fixa por métrica.
 
 ## Lacunas de dados (comuns até o cliente enviar mais fontes)
-- **Agendamentos / Reuniões Realizadas** → precisam da lista do comercial; aparecem "-".
+- **Agendamentos** → tem card na UI, mas Reuniões Realizadas (comparecimento) não
+  tem fonte neste cliente e foi removida da UI (ver "Funil completo" acima).
 - **Page Views, CR, CPV, ConvLP** → precisam de uma fonte de page views.
 - Enquanto não vierem, essas métricas aparecem como "-".
 
