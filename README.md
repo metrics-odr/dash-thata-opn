@@ -21,7 +21,7 @@ cada ~30 min, disparada pelo **cron-job.org** — sem depender de nenhum PC liga
 - **Qualificação & origem**: leads por Funil/Página, por origem (mídia paga vs. orgânico) e por plataforma.
 - **Cruzamento por campanha**: gasto (mídia paga) × leads/MQLs/Leads A (Central de Leads) → CPL, CPMQL, CPL-A e taxas calculadas.
 - **Tabela de leads qualificados** (e-mail e telefone **mascarados**, pois a página é pública).
-- **Toggle de imposto da mídia paga** (não usado para este cliente — `TAX_FACTOR = 1.0`), **toggle de moeda BRL/USD** (o gasto do Meta Ads é nativo em dólar; a conversão usa uma cotação buscada no build, com fallback fixo) e **modo claro/escuro**.
+- **Toggle de imposto da mídia paga** (`TAX_FACTOR = 1.13806`, 13,806%), **toggle de moeda BRL/USD** (o gasto do Meta Ads é nativo em dólar; a conversão usa uma cotação buscada no build, com fallback fixo) e **modo claro/escuro**.
 - **Aba Relatório**: painel de metas editável + Top/Piores Anúncios + Insights de Tráfego (texto, preenchido manualmente ou por automação própria — ver `build/GUIA-RELATORIOS.md`).
 
 ## Critério de Lead Qualificado (MQL) e Lead A

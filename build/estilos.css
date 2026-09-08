@@ -86,7 +86,7 @@
   .tax-toggle.on .toggle-thumb{left:18px}
   .toggle-label{font-size:12.5px; color:var(--muted)}
   .tax-toggle.on .toggle-label{color:var(--accent-blue); font-weight:600}
-  .currency-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:3px}
+  .currency-wrap{display:flex; flex-direction:column; align-items:center; gap:3px}
   .cur-label{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding-left:1px}
   .fx-rate{font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; padding-left:1px}
   /* seletor de moeda: 2 opções lado a lado (USD/BRL), estilo pill/segmented */

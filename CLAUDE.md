@@ -140,9 +140,11 @@ ignoradas por produto (`vendas ignoradas por Produto != MBA` em stderr).
 ver decisões documentadas no topo de `build.py`.
 
 ### Imposto da mídia paga
-`TAX_FACTOR = 1.0` em `build.py` — este cliente não tem imposto de mídia. O
-toggle "Imposto Meta" (switch on/off, `#taxToggle`) continua existindo na UI
-(padrão do template) mas fica sem efeito prático com `TAX_FACTOR = 1.0`.
+`TAX_FACTOR = 1.13806` em `build.py` — este cliente tem imposto de mídia de
+13,806%. O toggle "Imposto Meta" (switch on/off, `#taxToggle`, `app.js`)
+multiplica o gasto do Meta Ads (e tudo que deriva dele — CPL, CPMQL, CAC,
+ROAS etc., via `taxf()`) por `TAX_FACTOR` quando ligado; desligado, usa o
+gasto nativo sem imposto.
 
 ### Conversão de moeda (USD → BRL)
 O gasto do Meta Ads e o Faturamento (`fat`, de `Fat. líquido (USD)`) são ambos
