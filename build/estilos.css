@@ -86,13 +86,14 @@
   .tax-toggle.on .toggle-thumb{left:18px}
   .toggle-label{font-size:12.5px; color:var(--muted)}
   .tax-toggle.on .toggle-label{color:var(--accent-blue); font-weight:600}
-  .currency-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:3px}
+  .currency-wrap{display:flex; flex-direction:column; align-items:center; gap:3px}
   .cur-label{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding-left:1px}
   .fx-rate{font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; padding-left:1px}
   /* seletor de moeda: 2 opções lado a lado (USD/BRL), estilo pill/segmented */
   .cur-toggle{display:inline-flex; border:1px solid var(--border); border-radius:999px; padding:2px; background:var(--bg); gap:2px}
   .cur-opt{border:0; background:transparent; color:var(--muted); border-radius:999px; padding:5px 11px; font-size:12.5px;
-    cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+    cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; outline:none}
+  .cur-opt:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-blue) 40%,transparent)}
   .cur-opt .cur-flag{font-size:13px; line-height:1}
   .cur-opt.active{background:var(--accent-blue); color:#fff; font-weight:600}
 

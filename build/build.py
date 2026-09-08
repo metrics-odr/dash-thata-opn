@@ -34,7 +34,9 @@ Estrategica" / "Sala Secreta"). Diferente do template padrao (1 planilha com
          mesmo padrao do gasto do Meta Ads; o toggle de moeda multiplica/
          divide pela cotacao ao vivo no app.js.
 
-Nao ha' imposto de midia para este cliente (TAX_FACTOR = 1.0).
+Imposto de midia paga deste cliente: TAX_FACTOR = 1.13806 (13,806%), aplicado
+ao gasto do Meta Ads quando o toggle "Imposto Meta" (#taxToggle) esta' ligado
+(app.js::taxf()); desligado, usa o gasto nativo (sem imposto).
 
 Conversao de moeda (USD->BRL): a cotacao e' buscada 1x por build (funcao
 fetch_usd_brl_rate(), com fallback fixo se todas as APIs falharem — o build
@@ -91,7 +93,7 @@ MAIN_PRODUCT = "Sessão Estratégica"
 MAIN_PRODUCT_PREFIX = "OPN"
 
 BRT = timezone(timedelta(hours=-3))   # horario de Brasilia (exibicao)
-TAX_FACTOR = 1.0   # sem imposto de midia para este cliente
+TAX_FACTOR = 1.13806   # imposto de midia paga deste cliente = 13,806%
 
 # --------------------------------------------------------------------------- #
 # Regras da aba Relatório (Top/Piores anúncios)
