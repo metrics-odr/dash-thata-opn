@@ -119,11 +119,12 @@ e-mail, ainda conta nos totais/Visão Geral, porém como `(sem campanha)` /
 `src="org"` — some apenas da quebra por campanha do Meta. `read_agendamentos`/
 `read_sales` logam no build quantos ficaram sem anúncio de origem.
 
-Faturamento (`fat`) vem de `Valor bruto (BRL)`; receita líquida (`receita`) vem
-de `Fat. líquido (BRL)` — ambos já nativos em BRL (decisão de mapeamento; ver
-comentário em `build.py::read_sales`). "Status" de Agendamentos/Compradores não
-teve os valores exatos confirmados — ver decisões documentadas no topo de
-`build.py`.
+Faturamento (`fat`) vem de `Fat. líquido (USD)` — **nativo em USD** (decisão do
+cliente: usar o líquido em dólar em vez do bruto em BRL; ver comentário em
+`build.py::read_sales`), mesmo padrão do gasto do Meta Ads. Não há mais campo
+`receita`/card "Receita" separado (removido — era redundante com Faturamento).
+"Status" de Agendamentos/Compradores não teve os valores exatos confirmados —
+ver decisões documentadas no topo de `build.py`.
 
 ### Imposto da mídia paga
 `TAX_FACTOR = 1.0` em `build.py` — este cliente não tem imposto de mídia. O
@@ -131,14 +132,16 @@ toggle "Imposto Meta" continua existindo na UI (padrão do template) mas fica
 sem efeito prático com `TAX_FACTOR = 1.0`.
 
 ### Conversão de moeda (USD → BRL)
-O gasto do Meta Ads é **nativo em USD**. `build.py` busca a cotação USD/BRL 1x
-por build (`fetch_usd_brl_rate()`, APIs públicas sem chave, com fallback fixo
-5.30 se todas falharem — nunca quebra o build) e grava em
-`DATA.build.usd_brl_rate`. O toggle **"Moeda: BRL/USD"** na topbar
-(`STATE.currency` em `app.js`, mesmo padrão do toggle de imposto) multiplica
-(`BRL`) ou mantém (`USD`) o gasto nativo ao vivo no navegador — nunca no
-Python — e converte também Faturamento/Receita/CAC/ROAS/Ticket de forma
-consistente (ver `curF()`/`curBRL()` em `app.js`).
+O gasto do Meta Ads e o Faturamento (`fat`, de `Fat. líquido (USD)`) são ambos
+**nativos em USD**. `build.py` busca a cotação USD/BRL 1x por build
+(`fetch_usd_brl_rate()`, APIs públicas sem chave, com fallback fixo 5.30 se
+todas falharem — nunca quebra o build) e grava em `DATA.build.usd_brl_rate`. O
+toggle **"Moeda: BRL/USD"** na topbar (`STATE.currency` em `app.js`, mesmo
+padrão do toggle de imposto) multiplica (`BRL`) ou mantém (`USD`) os valores
+nativos ao vivo no navegador — nunca no Python — via `curF()` (mesma função
+para gasto e fat, já que ambos partem de USD; CAC/ROAS/Ticket herdam a
+conversão por dependerem de gasto/fat). A cotação vigente aparece como texto
+abaixo do toggle (`#fxRate` em `template.html`, preenchido em `app.js`).
 
 ### Convenções de campanha (do cliente)
 Campanhas usam dois prefixos — `OPN` e `OPNF` (`MAIN_PRODUCT_PREFIX = "OPN"` é

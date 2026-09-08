@@ -86,6 +86,8 @@
   .tax-toggle.on .toggle-thumb{left:18px}
   .toggle-label{font-size:12.5px; color:var(--muted)}
   .tax-toggle.on .toggle-label{color:var(--accent-blue); font-weight:600}
+  .currency-wrap{display:flex; flex-direction:column; align-items:flex-start; gap:2px}
+  .fx-rate{font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; padding-left:1px}
 
   /* ---------- Page content ---------- */
   .page-content{padding:24px 24px 60px}
@@ -145,7 +147,7 @@
   .funnel{display:flex; flex-direction:column; gap:7px}
   .step{display:flex; align-items:center; justify-content:space-between; gap:14px; row-gap:8px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 15px; border-left:4px solid var(--accent-blue)}
   .step.na{border-left-color:var(--border); opacity:.7}
-  /* Mar01: destaque das etapas MQL (azulado), Gasto (avermelhado) e Receita/Faturamento (esverdeado) + fonte mais forte */
+  /* Mar01: destaque das etapas MQL (azulado), Gasto (avermelhado) e Faturamento (esverdeado) + fonte mais forte */
   .step.hl-mql{background:var(--step-mql-bg); border-left-color:var(--step-mql-bd)}
   .step.hl-gasto{background:var(--step-gasto-bg); border-left-color:var(--step-gasto-bd)}
   .step.hl-fat{background:var(--step-fat-bg); border-left-color:var(--step-fat-bd)}

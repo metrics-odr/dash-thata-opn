@@ -9,7 +9,8 @@ const nf0=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
 const nf1=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
 const nf2=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 /* símbolo segue o toggle de moeda (STATE.currency) — a conversão do VALOR em si
-   acontece onde o número é calculado (derive/salesOf/gráficos), via curF()/curBRL() */
+   acontece onde o número é calculado (derive/salesOf/gráficos), via curF() —
+   gasto e fat (Fat. líquido) são ambos nativos em USD. */
 const brl=v=>(v==null||!isFinite(v))?'-':(typeof STATE!=='undefined'&&STATE.currency==='USD'?'US$ ':'R$ ')+nf2.format(v);
 const pct=v=>(v==null||!isFinite(v))?'-':nf2.format(v*100)+'%';
 const intf=v=>(v==null||!isFinite(v))?'-':nf0.format(v);
@@ -39,10 +40,6 @@ const taxf = ()=> STATE.tax ? TAX : 1;
    fica como está (multiplicador 1). Usado em toda conta que parte do gasto
    (derive/comboChart/lineChart/mqlByDimChart). */
 const curF = ()=> STATE.currency==='BRL' ? USD_RATE : 1;
-/* sales[]/agendamentos[] "fat"/"receita" são nativos em BRL (aba Compradores
-   já vem em BRL): em modo USD divide pela cotação; em modo BRL fica como está.
-   Mantém ROAS/Ticket coerentes (numerador e denominador na mesma moeda). */
-const curBRL = v => (v==null||!isFinite(v)) ? v : (STATE.currency==='USD' ? v/USD_RATE : v);
 
 /* active date test: selDays override the De/Até range */
 function dateActive(d){
@@ -63,11 +60,11 @@ const agdActive = ()=> AGD.filter(r=>dateActive(r.d));
 /* ---------------- aggregation ---------------- */
 function derive(a){
   const g=a.sp*taxf()*curF(), pv=a.pv||0;
-  const chk=a.chk||0, la=a.la||0;
-  return {gasto:g, impr:a.im, clicks:a.cl, pv, chk, leads:a.leads, mqls:a.mqls, la,
+  const la=a.la||0;
+  return {gasto:g, impr:a.im, clicks:a.cl, pv, leads:a.leads, mqls:a.mqls, la,
     cpm:a.im?g/a.im*1000:null, ctr:a.im?a.cl/a.im:null, cpc:a.cl?g/a.cl:null,
     cr:a.cl?pv/a.cl:null, cpv:pv?g/pv:null,
-    convlp:pv?a.leads/pv:null, vischk:pv?chk/pv:null,
+    convlp:pv?a.leads/pv:null,
     cpl:a.leads?g/a.leads:null, cpmql:a.mqls?g/a.mqls:null, tx:a.leads?a.mqls/a.leads:null,
     // Lead A: métrica PARALELA ao MQL (nunca substitui) — Tx‑A (Lead A/Leads),
     // CPL‑A (custo por Lead A) e A:MQL (proporção Lead A / MQL).
@@ -75,7 +72,7 @@ function derive(a){
 }
 /* --------- FUNIL: MQL → Venda (Vendas/Faturamento já ligados via build.py) ---------
    Funil do cliente: Impressões → Cliques → Leads → MQLs → Vendas → Faturamento.
-   `vendas`/`fat`/`receita` vêm de DATA.sales (build.py cruza Conversas × Compradores
+   `vendas`/`fat` vêm de DATA.sales (build.py cruza Conversas × Compradores
    por telefone) — um registro POR COMPRA, na data REAL da compra (nunca a data da
    conversa). `salesActive()` filtra por essa data e se propaga em
    buildAgg/daily/totals junto com fL/fM, acendendo funil, cards, colunas das
@@ -85,8 +82,8 @@ function salesOf(a){
   const g=(a?a.sp:0)*taxf()*curF();
   const mqls=(a&&a.mqls)||0;
   const agendamentos=(a&&a.agendamentos)||0, reunioes=(a&&a.reunioes)||0;
-  const vendas=(a&&a.vendas)||0, fatRaw=(a&&a.fat)||0, receitaRaw=(a&&a.receita)||0;
-  const fat=curBRL(fatRaw), receita=curBRL(receitaRaw);   // fat/receita nativos em BRL — convertidos p/ moeda ativa
+  const vendas=(a&&a.vendas)||0, fatRaw=(a&&a.fat)||0;
+  const fat=fatRaw*curF();   // fat (Fat. líquido) é nativo em USD, igual ao gasto
   const hasAg=agendamentos>0, hasRe=reunioes>0, hasVd=vendas>0||fatRaw>0;
   return {
     // MQL → Agendamento
@@ -104,26 +101,22 @@ function salesOf(a){
     cac:          hasVd&&vendas?g/vendas:null,
     roas:         hasVd&&g?fat/g:null,
     tm:           hasVd&&vendas?fat/vendas:null,
-    receita:      hasVd?receita:null,
-    roasReceita:  hasVd&&g?receita/g:null,
-    tmReceita:    hasVd&&vendas?receita/vendas:null,
     convmql:      hasVd&&mqls?vendas/mqls:null,
   };
 }
 function buildAgg(fL,fM,fS,dim,fAg){
   const m={};
-  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,chk:0,leads:0,mqls:0,la:0,vendas:0,fat:0,receita:0,agendamentos:0,reunioes:0});
-  fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv; a.chk+=r.ck||0;});
+  const get=k=>m[k]||(m[k]={sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,la:0,vendas:0,fat:0,agendamentos:0,reunioes:0});
+  fM.forEach(r=>{const a=get(r[dim]); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
   fL.forEach(r=>{const a=get(r[dim]); a.leads+=1; a.mqls+=r.q; a.la+=r.a||0;});
-  fS.forEach(r=>{const a=get(r[dim]); a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.receita+=r.receita||0;});
+  fS.forEach(r=>{const a=get(r[dim]); a.vendas+=r.vendas||0; a.fat+=r.fat||0;});
   (fAg||[]).forEach(r=>{const a=get(r[dim]); a.agendamentos+=r.agendamentos||0; a.reunioes+=r.reunioes||0;});
   return m;
 }
 function totals(fL,fM,fS,fAg){
-  let sp=0,im=0,cl=0,pv=0,chk=0; fM.forEach(r=>{sp+=r.sp;im+=r.im;cl+=r.cl;pv+=r.pv;chk+=r.ck||0;});
-  return {sp, im, cl, pv, chk, leads:fL.length, mqls:fL.reduce((s,r)=>s+r.q,0), la:fL.reduce((s,r)=>s+(r.a||0),0),
+  let sp=0,im=0,cl=0,pv=0; fM.forEach(r=>{sp+=r.sp;im+=r.im;cl+=r.cl;pv+=r.pv;});
+  return {sp, im, cl, pv, leads:fL.length, mqls:fL.reduce((s,r)=>s+r.q,0), la:fL.reduce((s,r)=>s+(r.a||0),0),
     vendas:fS.reduce((s,r)=>s+(r.vendas||0),0), fat:fS.reduce((s,r)=>s+(r.fat||0),0),
-    receita:fS.reduce((s,r)=>s+(r.receita||0),0),
     agendamentos:(fAg||[]).reduce((s,r)=>s+(r.agendamentos||0),0),
     reunioes:(fAg||[]).reduce((s,r)=>s+(r.reunioes||0),0)};
 }
@@ -131,10 +124,10 @@ function totals(fL,fM,fS,fAg){
    data REAL do evento (aba Compradores/Agendamentos), não a data do lead —
    ver build.py::process. */
 function daily(fL,fM,fS,fAg){
-  const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,chk:0,leads:0,mqls:0,la:0,vendas:0,fat:0,receita:0,agendamentos:0,reunioes:0});
-  fM.forEach(r=>{if(!r.d)return; const a=g(r.d); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv; a.chk+=r.ck||0;});
+  const days={}; const g=d=>days[d]||(days[d]={d, sp:0,im:0,cl:0,pv:0,leads:0,mqls:0,la:0,vendas:0,fat:0,agendamentos:0,reunioes:0});
+  fM.forEach(r=>{if(!r.d)return; const a=g(r.d); a.sp+=r.sp; a.im+=r.im; a.cl+=r.cl; a.pv+=r.pv;});
   fL.forEach(r=>{if(!r.d)return; const a=g(r.d); a.leads+=1; a.mqls+=r.q; a.la+=r.a||0;});
-  fS.forEach(r=>{if(!r.d)return; const a=g(r.d); a.vendas+=r.vendas||0; a.fat+=r.fat||0; a.receita+=r.receita||0;});
+  fS.forEach(r=>{if(!r.d)return; const a=g(r.d); a.vendas+=r.vendas||0; a.fat+=r.fat||0;});
   (fAg||[]).forEach(r=>{if(!r.d)return; const a=g(r.d); a.agendamentos+=r.agendamentos||0; a.reunioes+=r.reunioes||0;});
   return Object.values(days).sort((a,b)=>a.d<b.d?-1:1);
 }
@@ -629,9 +622,7 @@ function renderGeralCore(ids){
     ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
-    ['Reuniões Realizadas', s.reunioes!=null?intf(s.reunioes):NA, [['No‑show',s.txnoshow!=null?pct(s.txnoshow):NA],['CPRR',s.cprr!=null?brl(s.cprr):NA]], s.reunioes==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvMQL',s.convmql!=null?pct(s.convmql):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
-    ['Receita', s.receita!=null?brl(s.receita):NA, [['ROAS',s.roasReceita!=null?numf(s.roasReceita):NA],['Ticket',s.tmReceita!=null?brl(s.tmReceita):NA]], s.receita==null, 'hl-fat'],
     ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
   ];
   document.getElementById(ids.funnel).innerHTML=funnelHTML(steps);
@@ -981,19 +972,15 @@ const DAILY_COLS=[
   {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int',heat:'mqls'},{key:'cpmql',label:'CPMQL',type:'brl'},
   // Lead A: métrica PARALELA ao MQL (mais qualificado ainda) — CPL‑A/Tx‑A/A:MQL
   {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
-  {key:'chk',label:'Checkouts',type:'int'},{key:'vischk',label:'VisCHK',type:'pct'},
-  {key:'agd',label:'Agend.',type:'int'},{key:'reun',label:'Reun. Realiz.',type:'int'},
   {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
-  {key:'fat',label:'Fat.',type:'brl'},{key:'receita',label:'Receita',type:'brl'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
+  {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
 ];
 function dailyCells(x,d,isTotal){
   const s=salesOf(x);
   return {date:isTotal?null:x.d, wd:isTotal?'':weekday(x.d), gasto:d.gasto, cpm:d.cpm, ctr:d.ctr, cr:d.cr, convlp:d.convlp,
-    chk:d.chk, vischk:d.vischk,
     leads:x.leads, cpl:d.cpl, tx:d.tx, mqls:x.mqls, cpmql:d.cpmql,
     la:d.la, txa:d.txa, amql:d.amql, cpla:d.cpla,
-    agd:s.agendamentos, reun:s.reunioes,
-    convmql:s.convmql, vendas:s.vendas, cac:s.cac, fat:s.fat, receita:s.receita, roas:s.roas};
+    convmql:s.convmql, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas};
 }
 
 /* ---------------- PAGE 2: Captura Meta Ads ---------------- */
@@ -1027,9 +1014,7 @@ function renderMeta(){
     ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
-    ['Reuniões Realizadas', s.reunioes!=null?intf(s.reunioes):NA, [['No‑show',s.txnoshow!=null?pct(s.txnoshow):NA],['CPRR',s.cprr!=null?brl(s.cprr):NA]], s.reunioes==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvMQL',s.convmql!=null?pct(s.convmql):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
-    ['Receita', s.receita!=null?brl(s.receita):NA, [['ROAS',s.roasReceita!=null?numf(s.roasReceita):NA],['Ticket',s.tmReceita!=null?brl(s.tmReceita):NA]], s.receita==null, 'hl-fat'],
     ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
   ];
   document.getElementById('metaFunnel').innerHTML=funnelHTML(steps);
@@ -1077,15 +1062,15 @@ function renderMeta(){
     {key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
     {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
     {key:'convmql',label:'ConvMQL',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
-    {key:'fat',label:'Fat.',type:'brl'},{key:'receita',label:'Receita',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
+    {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
   ];
   function hierRows(map){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
       la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
-      convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,receita:s.receita,roas:s.roas}};}); }
+      convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas}};}); }
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
     la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
-    convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,receita:s.receita,roas:s.roas};}
+    convmql:s.convmql,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas};}
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
   const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad');
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
@@ -1227,6 +1212,8 @@ document.getElementById('taxToggle').addEventListener('click',function(){ STATE.
 (function wireCurrencyToggle(){
   const el=document.getElementById('currencyToggle'); if(!el) return;
   const label=el.querySelector('.toggle-label');
+  const fxEl=document.getElementById('fxRate');
+  if(fxEl) fxEl.textContent='1 USD = '+nf2.format(USD_RATE)+' BRL';
   const sync=()=>{ el.classList.toggle('on',STATE.currency==='BRL'); if(label) label.textContent='Moeda: '+STATE.currency; };
   sync();
   el.addEventListener('click',function(){ STATE.currency=STATE.currency==='BRL'?'USD':'BRL'; sync(); renderAll(); });

@@ -29,9 +29,10 @@ Estrategica" / "Sala Secreta"). Diferente do template padrao (1 planilha com
          data REAL do agendamento, camp/adset/ad vem da 1a conversa (lead)
          daquele telefone/e-mail.
        - "Compradores" (GID_SALES): vendas. Cruzada por telefone OU e-mail
-         (mesma logica). Usa "Fat. liquido (BRL)" como receita liquida e
-         "Valor bruto (BRL)" como faturamento bruto (ambos ja' nativos em
-         BRL — sem conversao de moeda aqui; so' o Meta Ads e' em USD).
+         (mesma logica). Usa "Fat. liquido (USD)" como faturamento (decisao
+         do cliente: liquido em dolar, nao o bruto em BRL) — NATIVO EM USD,
+         mesmo padrao do gasto do Meta Ads; o toggle de moeda multiplica/
+         divide pela cotacao ao vivo no app.js.
 
 Nao ha' imposto de midia para este cliente (TAX_FACTOR = 1.0).
 
@@ -459,18 +460,19 @@ def read_sales(sales_rows, phone_attrib, email_attrib):
     Moeda compra, Valor compra (orig.), Valor bruto (BRL), Fat. líquido
     (USD), Fat. líquido (BRL), Método pagto, Parcelas, Origem, Origem UTM
     (bruto), Detalhe UTM.
-    "fat" (faturamento bruto) <- "Valor bruto (BRL)"; "receita" (líquida)
-    <- "Fat. líquido (BRL)" — ambos já nativos em BRL (só o Meta Ads é USD).
-    Sem confirmação dos valores exatos de "Status" p/ cancelamento/reembolso:
-    conta TODA linha não vazia como venda (comportamento conservador do
-    template original)."""
+    "fat" (faturamento líquido) <- "Fat. líquido (USD)" — NATIVO EM USD
+    (decisão do cliente: usar o líquido em dólar em vez do bruto em BRL); a
+    conversão pro toggle de moeda acontece no app.js (mesmo padrão do gasto
+    do Meta Ads). Sem confirmação dos valores exatos de "Status" p/
+    cancelamento/reembolso: conta TODA linha não vazia como venda
+    (comportamento conservador do template original)."""
     header = sales_rows[0] if sales_rows else []
     idx = header_index(
         header,
         {"date": ["data"], "status": ["status"], "name": ["comprador"],
          "email": ["e-mail", "email"], "phone": ["telefone"],
-         "faturamento": ["valor bruto (brl)"], "receita": ["fat. liquido (brl)", "fat liquido (brl)"]},
-        {"date": 0, "status": 2, "name": 5, "email": 6, "phone": 7, "faturamento": 11, "receita": 13},
+         "faturamento": ["fat. liquido (usd)", "fat liquido (usd)"]},
+        {"date": 0, "status": 2, "name": 5, "email": 6, "phone": 7, "faturamento": 12},
     )
     NO_ATTRIB = {"src": "org", "camp": "(sem campanha)", "adset": "(sem conjunto)",
                  "ad": "(sem anúncio)", "d": None}
@@ -493,8 +495,7 @@ def read_sales(sales_rows, phone_attrib, email_attrib):
             "d": parse_date(cell(row, idx["date"])) or attrib["d"],
             "src": attrib["src"], "camp": attrib["camp"], "adset": attrib["adset"], "ad": attrib["ad"],
             "vendas": 1,
-            "fat": round(to_float(cell(row, idx["faturamento"])), 2),
-            "receita": round(to_float(cell(row, idx["receita"])), 2),
+            "fat": round(to_float(cell(row, idx["faturamento"])), 2),   # USD nativo
         })
     print(f"  vendas atribuídas a anúncio: {matched}/{total} (cruzamento telefone OU e-mail, Compradores × Central de Leads)",
           file=sys.stderr)
@@ -666,7 +667,7 @@ def main():
     print(f"  periodo   : {b['date_min']} -> {b['date_max']}", file=sys.stderr)
     print(f"  leads     : {len(data['leads'])}  MQLs (qualificados): {q}  Leads A: {la}", file=sys.stderr)
     print(f"  agend.    : {ag}  reuniões realizadas: {re_}", file=sys.stderr)
-    print(f"  vendas    : {vd}  faturamento: R$ {fat:,.2f}", file=sys.stderr)
+    print(f"  vendas    : {vd}  faturamento: US$ {fat:,.2f}", file=sys.stderr)
     print(f"  meta      : {len(data['meta'])} linhas  usd_brl_rate: {b['usd_brl_rate']}", file=sys.stderr)
     print(f"  out       : {args.out}", file=sys.stderr)
 
