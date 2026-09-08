@@ -45,16 +45,17 @@ TAG_LABEL = {"escala": "Escalar", "otimiza": "Otimizar", "corte": "Cortar", "obs
 
 
 def classify_campaigns(meta: list[dict], leads: list[dict], start: date, end: date,
-                        volume_min: int, meta_cpmql, n_dias_corte: int) -> list[tuple]:
+                        volume_min: int, meta_cpmql, n_dias_corte: int,
+                        sales: list[dict] | None = None, agendamentos: list[dict] | None = None) -> list[tuple]:
     camps = sorted({r["camp"] for r in meta if in_range(r["d"], start, end)} |
                     {r["camp"] for r in leads if in_range(r["d"], start, end)})
     out = []
     for camp in camps:
-        w0 = derived(agg(meta, leads, start, end, camp))
+        w0 = derived(agg(meta, leads, start, end, camp, sales=sales, agendamentos=agendamentos))
         w1s, w1e = shift_back(start, end, 1)
         w2s, w2e = shift_back(start, end, 2)
-        w1 = derived(agg(meta, leads, w1s, w1e, camp))
-        w2 = derived(agg(meta, leads, w2s, w2e, camp))
+        w1 = derived(agg(meta, leads, w1s, w1e, camp, sales=sales, agendamentos=agendamentos))
+        w2 = derived(agg(meta, leads, w2s, w2e, camp, sales=sales, agendamentos=agendamentos))
 
         if w0["mqls"] < volume_min:
             faltam = volume_min - w0["mqls"]
@@ -354,23 +355,25 @@ def sem_dado_payload(label: str, start, end) -> dict:
 
 def build_period_payload(label: str, start: date, end: date, meta: list[dict], leads: list[dict],
                           today: date, date_min, date_max, meta_cpmql, meta_cac,
-                          volume_min: int, n_dias_corte: int, key: str) -> dict:
-    cur = derived(agg(meta, leads, start, end))
+                          volume_min: int, n_dias_corte: int, key: str,
+                          sales: list[dict] | None = None, agendamentos: list[dict] | None = None) -> dict:
+    cur = derived(agg(meta, leads, start, end, sales=sales, agendamentos=agendamentos))
     if cur["leads"] == 0 and cur["spend"] == 0:
         return sem_dado_payload(label, start, end)
 
-    ref7 = derived(agg(meta, leads, today - timedelta(days=6), today))
-    ref14 = derived(agg(meta, leads, today - timedelta(days=13), today))
-    ref30 = derived(agg(meta, leads, today - timedelta(days=29), today))
+    ref7 = derived(agg(meta, leads, today - timedelta(days=6), today, sales=sales, agendamentos=agendamentos))
+    ref14 = derived(agg(meta, leads, today - timedelta(days=13), today, sales=sales, agendamentos=agendamentos))
+    ref30 = derived(agg(meta, leads, today - timedelta(days=29), today, sales=sales, agendamentos=agendamentos))
     saude = funnel_health(cur, ref30, meta_cpmql, meta_cac, volume_min, [ref7, ref14, ref30])
 
     p_start, p_end, metodo = previous_period(key, start, end, today, date_min, date_max)
-    anterior = derived(agg(meta, leads, p_start, p_end)) if p_start else None
+    anterior = derived(agg(meta, leads, p_start, p_end, sales=sales, agendamentos=agendamentos)) if p_start else None
     variacao = compare(cur, anterior)
 
-    camps = classify_campaigns(meta, leads, start, end, volume_min, meta_cpmql, n_dias_corte)
-    por_campanha = breakdown(meta, leads, start, end, "camp")
-    por_anuncio = breakdown(meta, leads, start, end, "ad")
+    camps = classify_campaigns(meta, leads, start, end, volume_min, meta_cpmql, n_dias_corte,
+                                sales=sales, agendamentos=agendamentos)
+    por_campanha = breakdown(meta, leads, start, end, "camp", sales=sales, agendamentos=agendamentos)
+    por_anuncio = breakdown(meta, leads, start, end, "ad", sales=sales, agendamentos=agendamentos)
     criativos = consolidado_criativos(por_anuncio)
 
     destaques = [m.upper() for m, v in variacao.items() if v["material"] and v["direcao"] == "melhorou"][:3]
@@ -401,19 +404,21 @@ def build_period_payload(label: str, start: date, end: date, meta: list[dict], l
 # --------------------------------------------------------------------------- #
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--conversas-file")
-    ap.add_argument("--meta-file")
-    ap.add_argument("--sales-file")
-    ap.add_argument("--leads-file")
+    ap.add_argument("--leads-file", help="CSV local da aba \"Central de Leads\" (fonte principal)")
+    ap.add_argument("--meta-file", help="CSV local da planilha Meta Ads")
+    ap.add_argument("--agendamentos-file", help="CSV local da aba \"Agendamentos\" (Calendly)")
+    ap.add_argument("--sales-file", help="CSV local da aba \"Compradores\"")
     ap.add_argument("--out", default="build/relatorios.json")
     args = ap.parse_args()
 
-    conversas_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_CONVERSAS), args.conversas_file)
-    meta_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_META), args.meta_file)
-    sales_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_SALES), args.sales_file)
-    leads_lp_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID, gid=bp.GID_LEADS), args.leads_file)
-    data = bp.process(conversas_rows, meta_rows, sales_rows, leads_lp_rows)
+    leads_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_LEADS, gid=bp.GID_LEADS), args.leads_file)
+    meta_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_META, gid=bp.GID_META), args.meta_file)
+    agendamentos_rows = bp.load_rows(
+        bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_LEADS, gid=bp.GID_AGENDAMENTOS), args.agendamentos_file)
+    sales_rows = bp.load_rows(bp.EXPORT_URL.format(sid=bp.SPREADSHEET_ID_LEADS, gid=bp.GID_SALES), args.sales_file)
+    data = bp.process(leads_rows, meta_rows, agendamentos_rows, sales_rows)
     leads, meta = data["leads"], data["meta"]
+    sales, agendamentos = data["sales"], data["agendamentos"]
 
     now_brt = datetime.now(BRT)
     today = now_brt.date()
@@ -432,6 +437,7 @@ def main():
         out["periodos"][key] = build_period_payload(
             label, start, end, meta, leads, today, date_min, date_max,
             bp.META_CPMQL, bp.META_CAC, bp.VOLUME_MIN_AMOSTRAL, bp.N_DIAS_CORTE, key,
+            sales=sales, agendamentos=agendamentos,
         )
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
