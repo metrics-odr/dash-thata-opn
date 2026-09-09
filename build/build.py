@@ -437,24 +437,33 @@ def read_agendamentos(agd_rows, phone_attrib, email_attrib):
     Por, Motivo do Cancelamento, Plataforma, Link da Reunião, Criado em,
     Funil Nota.
     Cada linha vira 1 registro em DATA.agendamentos[] (mesma filosofia de
-    sales[]: não agregado, com a data REAL do agendamento; camp/adset/ad vêm
-    do lead casado por telefone OU e-mail). "Status" contendo "realiz"
-    (normalizado) marca Reunião Realizada — valores exatos da coluna não
-    confirmados; ver decisão documentada no topo do arquivo."""
+    sales[]: não agregado; camp/adset/ad vêm do lead casado por telefone OU
+    e-mail). "Status" contendo "realiz" (normalizado) marca Reunião Realizada
+    — valores exatos da coluna não confirmados; ver decisão documentada no
+    topo do arquivo.
+    Pedido do cliente: só entram no funil de Agendamentos as linhas cuja
+    "Funil Nota" == "Sessão" (mesmo critério/normalização de is_sessao_funil,
+    outras linhas — ex. "Aplicação" — ficam de fora); e a data usada para
+    atribuir o agendamento ao dia é a de "Criado em" (quando o agendamento foi
+    CRIADO), nunca "Data" (quando a call vai/foi acontecer)."""
     header = agd_rows[0] if agd_rows else []
     idx = header_index(
         header,
         {"date": ["data"], "email": ["email"], "phone": ["telefone/whatsapp", "telefone"],
-         "status": ["status"]},
-        {"date": 1, "email": 8, "phone": 9, "status": 10},
+         "status": ["status"], "criado": ["criado em"], "funil_nota": ["funil nota"]},
+        {"date": 1, "email": 8, "phone": 9, "status": 10, "criado": 15, "funil_nota": 16},
     )
     NO_ATTRIB = {"src": "org", "camp": "(sem campanha)", "adset": "(sem conjunto)",
                  "ad": "(sem anúncio)", "d": None}
     out = []
     matched = 0
     total = 0
+    ignored_funil = 0
     for row in agd_rows[1:]:
         if not any((c or "").strip() for c in row):
+            continue
+        if not is_sessao_funil(cell(row, idx["funil_nota"])):
+            ignored_funil += 1
             continue
         total += 1
         phone = canon_phone(cell(row, idx["phone"]))
@@ -463,14 +472,16 @@ def read_agendamentos(agd_rows, phone_attrib, email_attrib):
         if attrib is not NO_ATTRIB:
             matched += 1
         status = cell(row, idx["status"])
+        criado = cell(row, idx["criado"]).split(" ")[0] if cell(row, idx["criado"]) else ""
         out.append({
-            "d": parse_date(cell(row, idx["date"])) or attrib["d"],
+            "d": parse_date(criado) or attrib["d"],
             "src": attrib["src"], "camp": attrib["camp"], "adset": attrib["adset"], "ad": attrib["ad"],
             "agendamentos": 1,
             "reunioes": 1 if is_reuniao_realizada(status) else 0,
         })
     print(f"  agendamentos atribuídos a anúncio: {matched}/{total} (cruzamento telefone OU e-mail)",
           file=sys.stderr)
+    print(f"  agendamentos ignorados por Funil Nota != Sessão: {ignored_funil}", file=sys.stderr)
     return out
 
 
