@@ -125,10 +125,17 @@ OU e-mail** — `build.py` → `read_leads()` monta `phone_attrib`/`email_attrib
 (1ª linha de cada contato define camp/adset/ad); `read_agendamentos()` e
 `read_sales()` tentam telefone (`canon_phone`) primeiro e caem para e-mail
 normalizado quando não bate. Cada agendamento/venda vira um registro próprio
-(não agregado) em `DATA.agendamentos[]`/`DATA.sales[]`, com a **data real do
-evento** (nunca a data do lead). No navegador, `agdActive()`/`salesActive()`
-(`app.js`) filtram pela mesma data ativa que `leadsActive()`/`metaActive()`, e
-os quatro arrays se propagam juntos em `buildAgg`/`daily`/`totals`.
+(não agregado) em `DATA.agendamentos[]`/`DATA.sales[]`. `read_sales()` usa a
+**data real da venda** (nunca a data do lead). `read_agendamentos()` é
+diferente (pedido do cliente): usa a data de **`Criado em`** (quando o
+agendamento foi CRIADO), nunca a coluna `Data`/`Hora Início` (quando a call
+vai/foi acontecer) — e só entram no funil as linhas cuja **`Funil Nota` ==
+"Sessão"** (mesmo critério/normalização de `is_sessao_funil`; outras linhas,
+ex. "Aplicação", são descartadas em `read_agendamentos()`, com log em stderr
+`agendamentos ignorados por Funil Nota != Sessão`). No navegador,
+`agdActive()`/`salesActive()` (`app.js`) filtram pela mesma data ativa que
+`leadsActive()`/`metaActive()`, e os quatro arrays se propagam juntos em
+`buildAgg`/`daily`/`totals`.
 
 **TODO agendamento/venda entra na dash**; quando não casa por telefone nem
 e-mail, ainda conta nos totais/Visão Geral, porém como `(sem campanha)` /
