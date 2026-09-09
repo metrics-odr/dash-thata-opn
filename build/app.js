@@ -289,10 +289,13 @@ function renderTable(cfg){
 }
 /* Heatmap por coluna: cor FIXA por métrica (definida em identidade-visual.css),
    só a OPACIDADE varia com o valor (maior valor = mais vibrante). */
-const HEAT_HUE={gasto:'--heat-gasto', leads:'--heat-leads', mqls:'--heat-mqls', roas:'--heat-roas', vendas:'--heat-vendas', la:'--heat-la', cpla:'--heat-cpla'};
+const HEAT_HUE={gasto:'--heat-gasto', leads:'--heat-leads', mqls:'--heat-mqls', roas:'--heat-roas', vendas:'--heat-vendas', la:'--heat-la', cpla:'--heat-cpla', agd:'--heat-agd'};
 function heat(v,lo,hi,kind){
-  if(v==null||!isFinite(v)||hi===lo||!HEAT_HUE[kind]) return 'transparent';
-  const t=Math.max(0,Math.min(1,(v-lo)/(hi-lo)));
+  if(v==null||!isFinite(v)||!HEAT_HUE[kind]) return 'transparent';
+  // hi===lo (só 1 dia com valor, ou todos iguais — comum em Vendas/ROAS/AGDs,
+  // que ficam null nos dias sem ocorrência): trata como intensidade máxima,
+  // em vez de sumir o heatmap por falta de variação.
+  const t=hi===lo?1:Math.max(0,Math.min(1,(v-lo)/(hi-lo)));
   const c=hx2rgb(cvar(HEAT_HUE[kind]));
   return `rgba(${c[0]},${c[1]},${c[2]},${(0.06+0.5*t).toFixed(3)})`;
 }
@@ -465,7 +468,7 @@ function renderGeralCore(ids){
     ['Leads', intf(t.leads), [['CPL',brl(dv.cpl)],['ConvLP',pct(dv.convlp)]]],
     // MQL e Lead A lado a lado — Lead A é métrica PARALELA (mais qualificada
     // ainda), nunca substitui o MQL. A:MQL = Lead A / MQL.
-    ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['MQLs', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvAGD',s.convagd!=null?pct(s.convagd):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
@@ -844,7 +847,7 @@ const DAILY_COLS=[
   // Lead A: métrica PARALELA ao MQL (mais qualificado ainda) — CPL‑A/Tx‑A
   // heatmap: Leads A laranja · CPL‑A cinza claro (ver --heat-la/--heat-cpla)
   {key:'la',label:'Leads A',type:'int',heat:'la'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'cpla',label:'CPL‑A',type:'brl',heat:'cpla'},
-  {key:'agd',label:'AGDs',type:'int'},{key:'txagd',label:'Tx‑AGD',type:'pct'},
+  {key:'agd',label:'AGDs',type:'int',heat:'agd'},{key:'txagd',label:'Tx‑AGD',type:'pct'},
   {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
   {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
 ];
@@ -885,7 +888,7 @@ function renderMeta(){
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
     ['Leads', intf(t.leads), [['CPL',brl(dv.cpl)],['ConvLP',pct(dv.convlp)]]],
-    ['MQLs (qualificados)', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
+    ['MQLs', intf(t.mqls), [['Tx‑MQL',pct(dv.tx)],['CPMQL',brl(dv.cpmql)]], false, 'hl-mql'],
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvAGD',s.convagd!=null?pct(s.convagd):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
