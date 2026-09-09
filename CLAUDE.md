@@ -269,8 +269,11 @@ Sem a coluna, o link vira "—".
 > Página 1 usa **funil vertical de leads** + KPIs secundários. Topbar tem
 > **seletor de período em calendário** (default "Este mês"). **Heatmap** = cor FIXA
 > por métrica (só opacidade varia): **Gasto=vermelho · Leads=azul · MQLs=ciano ·
-> Vendas=verde · ROAS=amarelo · Leads A=laranja · CPL‑A=cinza claro**
-> (`--heat-gasto/leads/mqls/vendas/roas/la/cpla`).
+> Vendas=verde · ROAS=amarelo · Leads A=laranja · CPL‑A=cinza claro · AGDs=roxo**
+> (`--heat-gasto/leads/mqls/vendas/roas/la/cpla/agd`). Colunas como Vendas/ROAS/AGDs
+> ficam `null` (não 0) nos dias sem ocorrência (ver `salesOf()` em `app.js`), então é
+> comum o intervalo ativo ter só 1 (ou nenhum) dia com valor — `heat()` trata
+> `hi===lo` como intensidade máxima (em vez de sumir a cor por falta de variação).
 
 O `build.py` **não agrega**: exporta as linhas cruas e TODA a lógica (filtros de
 data, filtro cruzado, KPIs, tabelas, gráficos, heatmap, imposto) roda no navegador.

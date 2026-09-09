@@ -159,6 +159,7 @@
   .step.hl-mql{background:var(--step-mql-bg); border-left-color:var(--step-mql-bd)}
   .step.hl-gasto{background:var(--step-gasto-bg); border-left-color:var(--step-gasto-bd)}
   .step.hl-fat{background:var(--step-fat-bg); border-left-color:var(--step-fat-bd)}
+  .step.hl-mql{flex-wrap:nowrap}
   .step.hl-mql .m-val,.step.hl-gasto .m-val,.step.hl-fat .m-val{font-size:21px; font-weight:700}
   .step.hl-mql .m-label,.step.hl-gasto .m-label,.step.hl-fat .m-label{font-weight:600; color:var(--ink)}
   .step .step-main{min-width:0}
