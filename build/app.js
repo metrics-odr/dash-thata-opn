@@ -841,9 +841,10 @@ const DAILY_COLS=[
   {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
   {key:'leads',label:'Leads',type:'int',heat:'leads'},{key:'cpl',label:'CPL',type:'brl'},
   {key:'tx',label:'Tx‑MQL',type:'pct'},{key:'mqls',label:'MQLs',type:'int',heat:'mqls'},{key:'cpmql',label:'CPMQL',type:'brl'},
-  // Lead A: métrica PARALELA ao MQL (mais qualificado ainda) — CPL‑A/Tx‑A/A:MQL
+  // Lead A: métrica PARALELA ao MQL (mais qualificado ainda) — CPL‑A/Tx‑A
   // heatmap: Leads A laranja · CPL‑A cinza claro (ver --heat-la/--heat-cpla)
-  {key:'la',label:'Leads A',type:'int',heat:'la'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl',heat:'cpla'},
+  {key:'la',label:'Leads A',type:'int',heat:'la'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'cpla',label:'CPL‑A',type:'brl',heat:'cpla'},
+  {key:'agd',label:'AGDs',type:'int'},{key:'txagd',label:'Tx‑AGD',type:'pct'},
   {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int',heat:'vendas'},{key:'cac',label:'CAC',type:'brl'},
   {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num',heat:'roas'},
 ];
@@ -851,7 +852,8 @@ function dailyCells(x,d,isTotal){
   const s=salesOf(x);
   return {date:isTotal?null:x.d, wd:isTotal?'':weekday(x.d), gasto:d.gasto, cpm:d.cpm, ctr:d.ctr, cr:d.cr, convlp:d.convlp,
     leads:x.leads, cpl:d.cpl, tx:d.tx, mqls:x.mqls, cpmql:d.cpmql,
-    la:d.la, txa:d.txa, amql:d.amql, cpla:d.cpla,
+    la:d.la, txa:d.txa, cpla:d.cpla,
+    agd:s.agendamentos, txagd:s.txag,
     convagd:s.convagd, vendas:s.vendas, cac:s.cac, fat:s.fat, roas:s.roas};
 }
 

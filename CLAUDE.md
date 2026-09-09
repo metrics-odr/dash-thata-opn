@@ -291,9 +291,12 @@ os mesmos em `app.js`/`template.html`):
 3. **Insights de IA** (id `rel`) — espelha a Visão Geral + painel de Metas editável +
    Top Anúncios (22 colunas + Status) + Insights de Tráfego. Ver `build/GUIA-RELATORIOS.md`.
 
-**Ordem das colunas nas tabelas:** `Data · Dia · Gasto · CPM · CTR · CR · ConvLP ·
-Leads · CPL · Tx‑MQL · MQLs · CPMQL · Leads A · Tx‑A · A:MQL · CPL‑A · ConvAGD ·
-Vendas · CAC · Fat. · ROAS` (ver `DAILY_COLS`/`hcols` em `app.js`). **ConvAGD**
+**Ordem das colunas nas tabelas diárias (`DAILY_COLS`):** `Data · Dia · Gasto ·
+CPM · CTR · CR · ConvLP · Leads · CPL · Tx‑MQL · MQLs · CPMQL · Leads A · Tx‑A ·
+CPL‑A · AGDs · Tx‑AGD · ConvAGD · Vendas · CAC · Fat. · ROAS` (`AGDs`/`Tx‑AGD` =
+`agendamentos`/`txag` de `salesOf()`, substituíram a coluna `A:MQL` — que
+continua nas 3 tabelas hierárquicas de Campanha/Conjunto/Anúncio, `hcols` em
+`app.js`). **ConvAGD**
 (= Vendas / Agendamentos) substituiu o antigo "ConvMQL" — nome e fórmula estavam
 incorretos (a coluna nunca dividiu por MQLs). Não há mais colunas de
 Checkouts/VisCHK/Agend./Reun. Realiz./Receita — removidas por não terem fonte
