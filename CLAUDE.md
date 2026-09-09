@@ -92,6 +92,17 @@ igual ao `ad_links` do permalink (usado no ícone "Prévia" 👁 da mesma tabela
 
 URL de export CSV: `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>`
 
+### Filtro de Funil (Central de Leads)
+Esta dash considera **SÓ os leads cuja coluna `Funil` == `"Sessão"`** (comparação
+normalizada — sem acento/maiúsculas, `is_sessao_funil()` em `build.py`).
+Outras linhas da mesma aba (outro funil, ex. "Sala Secreta", ou `Funil` vazio)
+são descartadas em `read_leads()` **antes** de entrar em `DATA.leads[]` — não
+aparecem em nenhuma página (Visão Geral/Meta Ads/Insights de IA) nem entram
+nas tabelas de atribuição (`phone_attrib`/`email_attrib`), então um
+agendamento/venda cujo único lead correspondente foi descartado por Funil
+também some da dash. O build loga quantos leads foram ignorados por isso
+(`leads ignorados por Funil != Sessão` em stderr).
+
 ### Regra de Lead Qualificado (MQL) e Lead A
 - **MQL** = coluna `Qualificação` == `"qualificado"`. Lógica em `build.py` → `is_mql`.
 - **Lead A** = coluna `Lead Scoring` == `"A"` — subconjunto MAIS qualificado que o

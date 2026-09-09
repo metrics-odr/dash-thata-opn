@@ -237,6 +237,14 @@ def is_lead_a(v: str | None) -> bool:
     return norm(v) == "a"
 
 
+def is_sessao_funil(v: str | None) -> bool:
+    """Filtro da Central de Leads (pedido do cliente): só entram no funil geral
+    da dash as linhas cuja coluna "Funil" == "Sessão" — outros funis na mesma
+    aba (ex.: "Sala Secreta") ficam de fora de todo o dataset (leads, e por
+    tabela de atribuição, também agendamentos/vendas casados por esses leads)."""
+    return norm(v) == "sessao"
+
+
 def is_mba_sale(v: str | None) -> bool:
     """Filtro de produto em "Compradores": esta dash considera SÓ as vendas do
     MBA (coluna "Produto" contendo "mba", case/acento-insensitive) — outras
@@ -366,8 +374,12 @@ def read_leads(leads_rows):
     )
     phone_attrib: dict[str, dict] = {}
     email_attrib: dict[str, dict] = {}
+    ignored_funil = 0
     for row in rows_sorted:
         if is_test_lead(" ".join(str(c) for c in row)):
+            continue
+        if not is_sessao_funil(cell(row, idx["funil"])):
+            ignored_funil += 1
             continue
         campaign_raw = cell(row, idx["campaign"])
         campaign_valid = valid_utm(campaign_raw)
@@ -405,6 +417,7 @@ def read_leads(leads_rows):
             "em": "—",
             "ph": mask_phone(cell(row, idx["phone"])),
         })
+    print(f"  leads ignorados por Funil != Sessão: {ignored_funil}", file=sys.stderr)
     return leads, phone_attrib, email_attrib
 
 
