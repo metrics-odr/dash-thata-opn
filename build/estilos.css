@@ -3,7 +3,7 @@
    Cores ficam SEMPRE em identidade-visual.css (via variáveis var(--...)).
    ============================================================================ */
   *{box-sizing:border-box}
-  html,body{margin:0}
+  html,body{margin:0; overflow-x:hidden}
   body{background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif; font-size:14px; -webkit-font-smoothing:antialiased}
   #app{display:flex; min-height:100vh}
 
@@ -20,6 +20,7 @@
   .sidebar .foot{margin-top:auto; border-top:1px solid rgba(255,255,255,.08); padding:12px 20px; font-size:11px; opacity:.35}
   .ham{display:none}
   #navToggle{display:none}
+  .nav-overlay{display:none}
 
   .main-area{margin-left:220px; flex:1 1 auto; min-width:0; display:flex; flex-direction:column}
 
@@ -241,10 +242,30 @@
   .foot{margin-top:26px; font-size:11.5px; color:var(--muted); border-top:1px solid var(--border); padding-top:12px}
 
   @media(max-width:900px){
-    .sidebar{transform:translateX(-100%); transition:transform .2s}
+    .sidebar{transform:translateX(-100%); transition:transform .2s; z-index:50}
     #navToggle:checked ~ .sidebar{transform:none}
-    .main-area{margin-left:0}
-    label.ham{display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border:1px solid var(--border); border-radius:9px; cursor:pointer; background:var(--surface)}
+    #navToggle:checked ~ .nav-overlay{display:block}
+    .nav-overlay{position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:45}
+    .main-area{margin-left:0; min-width:0; width:100%}
+    label.ham{display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border:1px solid var(--border); border-radius:9px; cursor:pointer; background:var(--surface); flex:0 0 auto}
+  }
+
+  /* ---------- Telas pequenas: reduz espaçamentos/fontes p/ tudo caber sem zoom ---------- */
+  @media(max-width:640px){
+    .page-content{padding:12px 12px 40px}
+    .topbar{padding:8px 12px; gap:8px}
+    .topbar .sep{display:none}
+    .topbar .updated{display:none}
+    .topbar .ptitle{font-size:14px}
+    .btn{padding:7px 9px; font-size:11.5px}
+    .cur-label{display:none}
+    .currency-wrap{gap:0}
+    .kpis.n2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .step{padding:10px 12px}
+    .step .secs{flex-wrap:wrap; justify-content:flex-start; row-gap:6px}
+    .chart-box{height:210px}
+    .chart-sm{height:170px}
+    .tbl-normal{max-height:220px}
   }
 
   /* ============================ ABA RELATÓRIO ============================ */
