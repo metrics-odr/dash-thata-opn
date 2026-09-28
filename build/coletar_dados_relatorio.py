@@ -240,7 +240,6 @@ def main():
                  "Routine do Claude escrever build/relatorios.json (Insights de Tráfego). Sem "
                  "interpretação/texto aqui, só aritmética.",
         "params": {
-            "tax_factor": bp.TAX_FACTOR,
             "sample_min_spend": bp.SAMPLE_MIN_SPEND,
             "sample_min_mqls": bp.SAMPLE_MIN_MQLS,
             "meta_cpmql": bp.META_CPMQL,

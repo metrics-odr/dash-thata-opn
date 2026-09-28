@@ -3,9 +3,9 @@
    Cores ficam SEMPRE em identidade-visual.css (via variáveis var(--...)).
    ============================================================================ */
   *{box-sizing:border-box}
-  html,body{margin:0; overflow-x:hidden}
+  html,body{margin:0; height:100%; overflow-x:hidden}
   body{background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif; font-size:14px; -webkit-font-smoothing:antialiased}
-  #app{display:flex; min-height:100vh}
+  #app{display:flex; height:100vh}
 
   /* ---------- Sidebar ---------- */
   .sidebar{width:220px; flex:0 0 220px; background:var(--text-primary); color:#fff; position:fixed; top:0; left:0; bottom:0; display:flex; flex-direction:column; z-index:40}
@@ -22,7 +22,7 @@
   #navToggle{display:none}
   .nav-overlay{display:none}
 
-  .main-area{margin-left:220px; flex:1 1 auto; min-width:0; display:flex; flex-direction:column}
+  .main-area{margin-left:220px; flex:1 1 auto; min-width:0; height:100vh; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column}
 
   /* ---------- Topbar ---------- */
   .topbar{position:sticky; top:0; z-index:30; background:var(--surface); border-bottom:1px solid var(--border); min-height:64px;
@@ -79,14 +79,6 @@
   .btn.loading .spin{animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* Toggle ON/OFF */
-  .tax-toggle{display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none}
-  .toggle-track{width:38px; height:22px; border-radius:999px; background:#cfd2dc; position:relative; transition:.15s}
-  .toggle-thumb{position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:.15s; box-shadow:0 1px 2px rgba(0,0,0,.25)}
-  .tax-toggle.on .toggle-track{background:var(--accent-blue)}
-  .tax-toggle.on .toggle-thumb{left:18px}
-  .toggle-label{font-size:12.5px; color:var(--muted)}
-  .tax-toggle.on .toggle-label{color:var(--accent-blue); font-weight:600}
   .currency-wrap{display:flex; flex-direction:column; align-items:center; gap:3px}
   .cur-label{font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding-left:1px}
   .fx-rate{font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; padding-left:1px}
