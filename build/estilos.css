@@ -309,6 +309,11 @@
   table.dt tfoot .stk-l, table.dt tfoot .stk-r{position:sticky; z-index:1; background:var(--tfoot)}
   table.dt .stk-l.stk-edge{border-right:1px solid var(--border)}
   table.dt .stk-r.stk-edge{border-left:1px solid var(--border)}
+  /* sticky cells têm background próprio (acima) p/ cobrir o conteúdo que rola por
+     baixo — isso também cobre o hover/seleção da linha, que é pintado no <tr>.
+     Repete a cor aqui em cima das células sticky p/ a linha parecer contínua. */
+  table.dt tbody tr:hover .stk-l, table.dt tbody tr:hover .stk-r{background:var(--accent-blue-light)}
+  table.dt tbody tr.sel .stk-l, table.dt tbody tr.sel .stk-r{background:var(--selected)}
 
   table.dt.rel-adt tbody tr{cursor:default}
   .rel-adlink{font-size:12px; font-weight:600; color:var(--accent-blue); text-decoration:none; white-space:nowrap}
