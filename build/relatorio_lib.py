@@ -86,7 +86,7 @@ def agg(meta: list[dict], leads: list[dict], start: date, end: date, camp: str |
 
     m = [r for r in meta if keep(r)]
     l = [r for r in leads if keep(r)]
-    spend = sum(r["sp"] for r in m) * bp.TAX_FACTOR
+    spend = sum(r["sp"] for r in m)
     impr = sum(r["im"] for r in m)
     clicks = sum(r["cl"] for r in m)
     n_leads = len(l)

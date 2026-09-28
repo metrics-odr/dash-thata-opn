@@ -34,16 +34,15 @@ Estrategica" / "Sala Secreta"). Diferente do template padrao (1 planilha com
          mesmo padrao do gasto do Meta Ads; o toggle de moeda multiplica/
          divide pela cotacao ao vivo no app.js.
 
-Imposto de midia paga deste cliente: TAX_FACTOR = 1.13806 (13,806%), aplicado
-ao gasto do Meta Ads quando o toggle "Imposto Meta" (#taxToggle) esta' ligado
-(app.js::taxf()); desligado, usa o gasto nativo (sem imposto).
+Esta conta nao tem imposto de midia paga — nao ha fator de imposto nem toggle
+"Imposto Meta" no front-end; o gasto do Meta Ads e' usado nativo.
 
 Conversao de moeda (USD->BRL): a cotacao e' buscada 1x por build (funcao
 fetch_usd_brl_rate(), com fallback fixo se todas as APIs falharem — o build
 NUNCA quebra por causa disso) e gravada em data["build"]["usd_brl_rate"]. O
 gasto (meta[].sp) continua nativo em USD no JSON; o toggle "BRL/USD" da
 topbar (STATE.currency em app.js) e' quem multiplica/divide pela taxa ao
-vivo no navegador — igual ao toggle de imposto (STATE.tax) ja existente.
+vivo no navegador.
 
 Este script apenas LE as planilhas (export CSV publico) e emite os REGISTROS
 BRUTOS (leads[], meta[], sales[], agendamentos[]) dentro do HTML. sales[] e
@@ -93,7 +92,6 @@ MAIN_PRODUCT = "Sessão Estratégica"
 MAIN_PRODUCT_PREFIX = "OPN"
 
 BRT = timezone(timedelta(hours=-3))   # horario de Brasilia (exibicao)
-TAX_FACTOR = 1.13806   # imposto de midia paga deste cliente = 13,806%
 
 # --------------------------------------------------------------------------- #
 # Regras da aba Relatório (Top/Piores anúncios)
@@ -629,7 +627,6 @@ def process(leads_rows, meta_rows, agendamentos_rows, sales_rows):
             "today": now_brt.strftime("%Y-%m-%d"),
             "date_min": dates[0] if dates else None,
             "date_max": dates[-1] if dates else None,
-            "tax_factor": TAX_FACTOR,
             "usd_brl_rate": usd_brl_rate,   # gasto (meta[].sp) é USD nativo; app.js converte ao vivo
             "sample_min_spend": SAMPLE_MIN_SPEND,
             "sample_min_mqls": SAMPLE_MIN_MQLS,

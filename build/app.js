@@ -1,7 +1,6 @@
 "use strict";
 const DATA = JSON.parse(document.getElementById('payload').textContent);
 const LEADS = DATA.leads, META = DATA.meta, SALES = DATA.sales||[], AGD = DATA.agendamentos||[], B = DATA.build;
-const TAX = B.tax_factor || 1.0;
 const USD_RATE = B.usd_brl_rate || 5.30;   // gasto (meta[].sp) é USD nativo; toggle de moeda converte ao vivo
 
 /* ---------------- format ---------------- */
@@ -29,13 +28,12 @@ const TODAY = B.today || B.date_max;
 
 /* ---------------- STATE ---------------- */
 const STATE = {
-  page:'geral', from:(()=>{const [y,m]=TODAY.split('-'); return `${y}-${m}-01`;})(), to:TODAY, preset:'mes', tax:true,
-  currency:'BRL',   // 'BRL' | 'USD' — toggle da topbar (mesmo padrão do toggle de imposto)
+  page:'geral', from:(()=>{const [y,m]=TODAY.split('-'); return `${y}-${m}-01`;})(), to:TODAY, preset:'mes',
+  currency:'BRL',   // 'BRL' | 'USD' — toggle da topbar
   selDays:new Set(),
   mSelC:new Set(), mSelA:new Set(), mSelAd:new Set(),
   sort:{}, colw: JSON.parse(localStorage.getItem('dm_colw')||'{}'),
 };
-const taxf = ()=> STATE.tax ? TAX : 1;
 /* meta[].sp é nativo em USD: em modo BRL multiplica pela cotação; em modo USD
    fica como está (multiplicador 1). Usado em toda conta que parte do gasto
    (derive/comboChart/lineChart/mqlByDimChart). */
@@ -59,7 +57,7 @@ const agdActive = ()=> AGD.filter(r=>dateActive(r.d));
 
 /* ---------------- aggregation ---------------- */
 function derive(a){
-  const g=a.sp*taxf()*curF(), pv=a.pv||0;
+  const g=a.sp*curF(), pv=a.pv||0;
   const la=a.la||0;
   return {gasto:g, impr:a.im, clicks:a.cl, pv, leads:a.leads, mqls:a.mqls, la,
     cpm:a.im?g/a.im*1000:null, ctr:a.im?a.cl/a.im:null, cpc:a.cl?g/a.cl:null,
@@ -82,7 +80,7 @@ function derive(a){
    tabelas e Top/Piores anúncios. Agendamentos/Reuniões Realizadas não têm fonte
    neste cliente — ficam null -> "-" até existir lista do comercial. */
 function salesOf(a){
-  const g=(a?a.sp:0)*taxf()*curF();
+  const g=(a?a.sp:0)*curF();
   const mqls=(a&&a.mqls)||0;
   const agendamentos=(a&&a.agendamentos)||0, reunioes=(a&&a.reunioes)||0;
   const vendas=(a&&a.vendas)||0, fatRaw=(a&&a.fat)||0;
@@ -326,9 +324,9 @@ function comboChart(id, d){
     data:{labels, datasets:[
       {type:'bar',label:'Leads',data:d.map(x=>x.leads),backgroundColor:cLeads,yAxisID:'y',borderRadius:3,order:3},
       {type:'bar',label:'MQLs',data:d.map(x=>x.mqls),backgroundColor:cMqls,yAxisID:'y',borderRadius:3,order:3},
-      {type:'line',label:'Gasto',data:d.map(x=>+(x.sp*taxf()*curF()).toFixed(2)),borderColor:cGasto,backgroundColor:cGasto,yAxisID:'y1',borderWidth:2,pointRadius:2,tension:.25,order:1},
-      {type:'line',label:'CPL',data:d.map(x=>x.leads?+((x.sp*taxf()*curF())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
-      {type:'line',label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*taxf()*curF())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
+      {type:'line',label:'Gasto',data:d.map(x=>+(x.sp*curF()).toFixed(2)),borderColor:cGasto,backgroundColor:cGasto,yAxisID:'y1',borderWidth:2,pointRadius:2,tension:.25,order:1},
+      {type:'line',label:'CPL',data:d.map(x=>x.leads?+((x.sp*curF())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
+      {type:'line',label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*curF())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,yAxisID:'y1',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25,order:0},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{labels:{color:cink(),boxWidth:10,usePointStyle:true,font:{size:11}}},
@@ -358,8 +356,8 @@ function lineChart(id, d){
   const cCpmql=cvar('--chart-cpmql'), cCpl=cvar('--chart-cpl')||cink();
   charts[id]=new Chart(el,{type:'line',
     data:{labels,datasets:[
-      {label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*taxf()*curF())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
-      {label:'CPL',data:d.map(x=>x.leads?+((x.sp*taxf()*curF())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
+      {label:'CPMQL',data:d.map(x=>x.mqls?+((x.sp*curF())/x.mqls).toFixed(2):null),borderColor:cCpmql,backgroundColor:cCpmql,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
+      {label:'CPL',data:d.map(x=>x.leads?+((x.sp*curF())/x.leads).toFixed(2):null),borderColor:cCpl,backgroundColor:cCpl,borderWidth:2,pointRadius:2,spanGaps:true,tension:.25},
     ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{labels:{color:cink(),boxWidth:10,usePointStyle:true,font:{size:10}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+brl(c.raw)}}},
@@ -404,7 +402,7 @@ function mqlByDimChart(id, fL, fM, agg, dim, selSet){
     const spDay={}, mqlDay={}; days.forEach(d=>{spDay[d]=0; mqlDay[d]=0;});
     fM.forEach(r=>{ if(r[dim]===mv && r.d!=null && spDay[r.d]!=null) spDay[r.d]+=r.sp; });
     fL.forEach(r=>{ if(r[dim]===mv && r.d!=null && mqlDay[r.d]!=null) mqlDay[r.d]+=r.q; });
-    const data=days.map(d=> mqlDay[d]>0 ? +((spDay[d]*taxf()*curF())/mqlDay[d]).toFixed(2) : null);
+    const data=days.map(d=> mqlDay[d]>0 ? +((spDay[d]*curF())/mqlDay[d]).toFixed(2) : null);
     const col=pal[idx%pal.length];
     return {label:String(mv), data, borderColor:col, backgroundColor:col, borderWidth:2, pointRadius:2, tension:.25, spanGaps:true};
   });
@@ -482,7 +480,7 @@ function renderGeralCore(ids){
   Object.entries(adAgg).forEach(([ad,a])=>{
     if(a.sp>0) nAdsAtivos++;
     if(topAd==null||a.mqls>topAd.m) topAd={ad,m:a.mqls};
-    if(a.mqls>0){ const cq=(a.sp*taxf()*curF())/a.mqls; if(bestAd==null||cq<bestAd.v) bestAd={ad,v:cq}; }
+    if(a.mqls>0){ const cq=(a.sp*curF())/a.mqls; if(bestAd==null||cq<bestAd.v) bestAd={ad,v:cq}; }
   });
   const nCampAtivas=Object.values(buildAgg(fL,fM,fS,'camp')).filter(a=>a.sp>0).length;
   const concTop=(t.mqls&&topAd)?topAd.m/t.mqls:null;
@@ -1087,8 +1085,7 @@ applyTheme();
 document.getElementById('themeBtn').addEventListener('click',()=>{ const dark=document.documentElement.getAttribute('data-theme')==='dark'; localStorage.setItem('dm_theme',dark?'light':'dark'); applyTheme(); renderAll(); });
 
 document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setPage(n.dataset.page)));
-document.getElementById('taxToggle').addEventListener('click',function(){ STATE.tax=!STATE.tax; this.classList.toggle('on',STATE.tax); renderAll(); });
-/* toggle de moeda BRL/USD — mesmo padrão do toggle de imposto acima. Gasto do
+/* toggle de moeda BRL/USD. Gasto do
    Meta Ads é nativo em USD (meta[].sp); "on" = BRL (multiplica pela cotação
    B.usd_brl_rate), "off" = USD nativo. */
 (function wireCurrencyToggle(){
