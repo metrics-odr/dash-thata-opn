@@ -28,11 +28,12 @@ Estrategica" / "Sala Secreta"). Diferente do template padrao (1 planilha com
          registro por agendamento (nao agregado), no MESMO padrao de sales[]:
          data REAL do agendamento, camp/adset/ad vem da 1a conversa (lead)
          daquele telefone/e-mail.
-       - "Compradores" (GID_SALES): vendas. Cruzada por telefone OU e-mail
-         (mesma logica). Usa "Fat. liquido (USD)" como faturamento (decisao
-         do cliente: liquido em dolar, nao o bruto em BRL) — NATIVO EM USD,
-         mesmo padrao do gasto do Meta Ads; o toggle de moeda multiplica/
-         divide pela cotacao ao vivo no app.js.
+       - VENDAS (SPREADSHEET_ID_SALES, planilha propria "Controle Alunas MBA"):
+         colunas Nome/E-mail/Whatsapp/Data da venda/Produto/Ticket. Cruzada
+         com a Central de Leads por telefone OU e-mail (mesma logica). O
+         Ticket e' em BRL e e' convertido p/ USD nativo no build (÷ cotacao),
+         mantendo fat em USD como o gasto do Meta Ads; o toggle de moeda
+         no app.js devolve o valor exato em BRL.
 
 Esta conta nao tem imposto de midia paga — nao ha fator de imposto nem toggle
 "Imposto Meta" no front-end; o gasto do Meta Ads e' usado nativo.
@@ -79,7 +80,10 @@ SPREADSHEET_ID_LEADS = "1v3mc-Z3lUYzGGkyIIYdK9PL3M-O6cgIBTlUWHQDboGU"  # "Centra
 GID_META = "0"                  # aba unica da planilha Meta Ads
 GID_LEADS = "0"                 # aba "Central de Leads" (fonte principal)
 GID_AGENDAMENTOS = "1722749521"  # aba "Agendamentos" (Calendly)
-GID_SALES = "86137300"          # aba "Compradores"
+# VENDAS: planilha própria "Controle Alunas MBA - a partir de agosto" (aba "geral"),
+# colunas Nome · E-mail · Whatsapp · Data da venda · Produto · Ticket (em BRL).
+SPREADSHEET_ID_SALES = "1AhvMbzcLu2wqN5wA03dr0t_zIzh_rUQtAz9NHoKAs8Q"
+GID_SALES = "0"
 
 EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={gid}"
 
@@ -193,6 +197,29 @@ def to_float(v) -> float:
         s = s.replace(".", "").replace(",", ".")
     elif "," in s:
         s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def to_brl(v) -> float:
+    """Valor monetário em BRL vindo da planilha de vendas. Aceita o formato
+    exportado pelo Sheets ("R$ 10,000.00" — milhar com vírgula, decimal com
+    ponto) e o brasileiro ("R$ 10.000,00" / "10000,5"). Decide pelo ÚLTIMO
+    separador: ele é o decimal se vier seguido de 1-2 dígitos; senão é milhar."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = re.sub(r"[^\d,.\-]", "", str(v or "").strip())
+    if not s:
+        return 0.0
+    m = re.search(r"[.,](\d+)$", s)
+    if m and len(m.group(1)) <= 2:
+        dec = m.group(1)
+        intpart = re.sub(r"[.,]", "", s[:m.start()])
+        s = f"{intpart}.{dec}"
+    else:
+        s = re.sub(r"[.,]", "", s)
     try:
         return float(s)
     except ValueError:
@@ -486,27 +513,21 @@ def read_agendamentos(agd_rows, phone_attrib, email_attrib):
 # --------------------------------------------------------------------------- #
 # Compradores -> registros por venda (não agregado)
 # --------------------------------------------------------------------------- #
-def read_sales(sales_rows, phone_attrib, email_attrib):
-    """Lê a aba "Compradores". Colunas:
-    Data, Hora, Status, Produto, Tipo, Comprador(a), E-mail, Telefone, País,
-    Moeda compra, Valor compra (orig.), Valor bruto (BRL), Fat. líquido
-    (USD), Fat. líquido (BRL), Método pagto, Parcelas, Origem, Origem UTM
-    (bruto), Detalhe UTM.
-    "fat" (faturamento líquido) <- "Fat. líquido (USD)" — NATIVO EM USD
-    (decisão do cliente: usar o líquido em dólar em vez do bruto em BRL); a
-    conversão pro toggle de moeda acontece no app.js (mesmo padrão do gasto
-    do Meta Ads). Sem confirmação dos valores exatos de "Status" p/
-    cancelamento/reembolso: conta TODA linha não vazia como venda
-    (comportamento conservador do template original).
-    Esta dash considera SÓ as vendas do MBA: linhas cuja coluna "Produto" não
-    contém "mba" são ignoradas (decisão do cliente — ver is_mba_sale)."""
+def read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate):
+    """Lê a planilha de vendas "Controle Alunas MBA". Colunas:
+    Nome, E-mail, Whatsapp, Data da venda, Produto, Ticket.
+    "Ticket" é em BRL; como "fat" é USD nativo em todo o app (o toggle de moeda
+    converte no app.js), divide-se por usd_brl_rate aqui — no toggle BRL o valor
+    volta exato ao Ticket da planilha. Cruza com a Central de Leads por telefone
+    OU e-mail (atribuição de campanha/conjunto/anúncio). Toda linha com Ticket
+    ou e-mail/telefone conta como venda; só entra Produto contendo "mba"."""
     header = sales_rows[0] if sales_rows else []
     idx = header_index(
         header,
-        {"date": ["data"], "status": ["status"], "name": ["comprador"],
-         "email": ["e-mail", "email"], "phone": ["telefone"], "produto": ["produto"],
-         "faturamento": ["fat. liquido (usd)", "fat liquido (usd)"]},
-        {"date": 0, "status": 2, "produto": 3, "name": 5, "email": 6, "phone": 7, "faturamento": 12},
+        {"date": ["data da venda", "data"], "name": ["nome"],
+         "email": ["e-mail", "email"], "phone": ["whatsapp", "telefone"],
+         "produto": ["produto"], "ticket": ["ticket", "valor"]},
+        {"name": 0, "email": 1, "phone": 2, "date": 3, "produto": 4, "ticket": 5},
     )
     NO_ATTRIB = {"src": "org", "camp": "(sem campanha)", "adset": "(sem conjunto)",
                  "ad": "(sem anúncio)", "d": None}
@@ -533,9 +554,9 @@ def read_sales(sales_rows, phone_attrib, email_attrib):
             "d": parse_date(cell(row, idx["date"])) or attrib["d"],
             "src": attrib["src"], "camp": attrib["camp"], "adset": attrib["adset"], "ad": attrib["ad"],
             "vendas": 1,
-            "fat": round(to_float(cell(row, idx["faturamento"])), 2),   # USD nativo
+            "fat": round(to_brl(cell(row, idx["ticket"])) / usd_brl_rate, 6),   # BRL -> USD nativo
         })
-    print(f"  vendas atribuídas a anúncio: {matched}/{total} (cruzamento telefone OU e-mail, Compradores × Central de Leads)",
+    print(f"  vendas atribuídas a anúncio: {matched}/{total} (cruzamento telefone OU e-mail, Vendas × Central de Leads)",
           file=sys.stderr)
     print(f"  vendas ignoradas por Produto != MBA: {skipped_produto}", file=sys.stderr)
     if unmatched_log:
@@ -611,9 +632,8 @@ def process(leads_rows, meta_rows, agendamentos_rows, sales_rows):
     leads, phone_attrib, email_attrib = read_leads(leads_rows)
     meta, ad_links, ad_status = read_meta(meta_rows)
     agendamentos = read_agendamentos(agendamentos_rows, phone_attrib, email_attrib) if agendamentos_rows else []
-    sales = read_sales(sales_rows, phone_attrib, email_attrib) if sales_rows else []
-
     usd_brl_rate = fetch_usd_brl_rate()
+    sales = read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate) if sales_rows else []
 
     dates = sorted({d for d in (
         [l["d"] for l in leads if l["d"]] + [m["d"] for m in meta if m["d"]] +
@@ -695,7 +715,7 @@ def main():
     leads_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_LEADS, gid=GID_LEADS), args.leads_file)
     meta_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_META, gid=GID_META), args.meta_file)
     agendamentos_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_LEADS, gid=GID_AGENDAMENTOS), args.agendamentos_file)
-    sales_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_LEADS, gid=GID_SALES), args.sales_file)
+    sales_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_SALES, gid=GID_SALES), args.sales_file)
 
     data = process(leads_rows, meta_rows, agendamentos_rows, sales_rows)
 

@@ -88,9 +88,17 @@ igual ao `ad_links` do permalink (usado no ícone "Prévia" 👁 da mesma tabela
 |-----|-----|----------------|
 | **Central de Leads** (fonte principal) | `0` | `Data` · `Nome` · `Email` · `Telefone` · `Funil` · `Página` · `Qualificação` · `Lead Scoring` · `UTM Source` · `UTM Medium` · `UTM Campaign` · `UTM Content` · `UTM Term` · `UTM id` · `Agendamento` |
 | **Agendamentos** (Calendly) | `1722749521` | `ID Calendly` · `Data` · `Dia da Semana` · `Hora Início` · `Hora Fim` · `Consultora` · `Tipo de Evento` · `Convidado` · `Email` · `Telefone/WhatsApp` · `Status` · `Cancelado Por` · `Motivo do Cancelamento` · `Plataforma` · `Link da Reunião` · `Criado em` · `Funil Nota` |
-| **Compradores** | `86137300` | `Data` · `Hora` · `Status` · `Produto` · `Tipo` · `Comprador(a)` · `E-mail` · `Telefone` · `País` · `Moeda compra` · `Valor compra (orig.)` · `Valor bruto (BRL)` · `Fat. líquido (USD)` · `Fat. líquido (BRL)` · `Método pagto` · `Parcelas` · `Origem` · `Origem UTM (bruto)` · `Detalhe UTM` |
+| ~~Compradores~~ (NÃO usada mais p/ vendas) | `86137300` | `Data` · `Hora` · `Status` · `Produto` · `Tipo` · `Comprador(a)` · `E-mail` · `Telefone` · `País` · `Moeda compra` · `Valor compra (orig.)` · `Valor bruto (BRL)` · `Fat. líquido (USD)` · `Fat. líquido (BRL)` · `Método pagto` · `Parcelas` · `Origem` · `Origem UTM (bruto)` · `Detalhe UTM` |
 
 URL de export CSV: `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv&gid=<GID>`
+
+### Vendas — planilha própria "Controle Alunas MBA - a partir de agosto"
+**As VENDAS NÃO vêm mais da aba Compradores.** Fonte: `SPREADSHEET_ID_SALES = "1AhvMbzcLu2wqN5wA03dr0t_zIzh_rUQtAz9NHoKAs8Q"`, `GID_SALES="0"` (aba `geral`):
+`Nome` · `E-mail` · `Whatsapp` · `Data da venda` · `Produto` · `Ticket` (**BRL**, formato `R$ 10,000.00`, parseado por `to_brl()`).
+`read_sales()` cruza com a Central de Leads por telefone OU e-mail, usa `Data da venda`
+como data e converte `Ticket` BRL→USD (÷ `usd_brl_rate` do build) para manter `fat` em USD
+nativo; no toggle BRL o valor volta exato ao Ticket. Filtro `Produto` contém "mba" mantido.
+(Onde este documento ainda cita "Compradores"/"Fat. líquido (USD)" para vendas, vale a regra acima.)
 
 ### Filtro de Funil (Central de Leads)
 Esta dash considera **SÓ os leads cuja coluna `Funil` == `"Sessão"`** (comparação
