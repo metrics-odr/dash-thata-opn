@@ -305,8 +305,22 @@ function toggleSet(set,key,ctrl,others){
 
 /* ---------------- funil ---------------- */
 function funnelHTML(steps){ return steps.map(s=>`
-    <div class="step ${s[3]?'na':''} ${s[4]||''}"><div class="step-main"><div class="m-label">${s[0]}</div><div class="m-val">${s[1]}</div></div>
+    <div class="step ${s[3]?'na':''} ${s[4]||''}"><div class="step-main"><div class="m-label">${s[0]}</div><div class="m-val"${s[5]!=null&&isFinite(s[5])?` data-full="${s[1]}" data-raw="${s[5]}"`:''}>${s[1]}</div></div>
     <div class="secs">${s[2].map(x=>`<div><span class="s-label">${x[0]}</span><span class="s-val">${x[1]}</span></div>`).join('')}</div></div>`).join(''); }
+/* Valor monetário do funil: mostra INTEIRO quando cabe; só abrevia ("R$ 53,00 mil") se estourar a largura. */
+function shortMoney(v){
+  const sym=STATE.currency==='USD'?'US$ ':'R$ ', a=Math.abs(v);
+  if(a>=1e6) return sym+nf2.format(v/1e6)+' mi';
+  if(a>=1e3) return sym+nf2.format(v/1e3)+' mil';
+  return null;
+}
+function fitFunnelValues(){
+  document.querySelectorAll('.m-val[data-raw]').forEach(el=>{
+    el.textContent=el.dataset.full;
+    if(el.scrollWidth>el.clientWidth+1){ const sh=shortMoney(+el.dataset.raw); if(sh) el.textContent=sh; }
+  });
+}
+window.addEventListener('resize',()=>{ try{ fitFunnelValues(); }catch(e){} });
 
 /* ---------------- charts ---------------- */
 const charts={};
@@ -459,7 +473,7 @@ function renderGeralCore(ids){
   const NA='<span class="na-tag">sem dado</span>';
   const s=salesOf(t);
   const steps=[
-    ['Gasto Total', brl(g), [], false, 'hl-gasto'],
+    ['Gasto Total', brl(g), [], false, 'hl-gasto', g],
     ['Impressões', intf(t.im), [['CPM',brl(dv.cpm)]]],
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
@@ -470,9 +484,9 @@ function renderGeralCore(ids){
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvAGD',s.convagd!=null?pct(s.convagd):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
-    ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
+    ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat', s.fat],
   ];
-  document.getElementById(ids.funnel).innerHTML=funnelHTML(steps);
+  document.getElementById(ids.funnel).innerHTML=funnelHTML(steps); fitFunnelValues();
   // ---- Mar05: métricas secundárias mais úteis (não repetem o funil) ----
   const dd=daily(fL,fM,fS,fAg), nDays=dd.length||1;
   const adAgg=buildAgg(fL,fM,fS,'ad');
@@ -881,7 +895,7 @@ function renderMeta(){
   const NA='<span class="na-tag">sem dado</span>';
   const s=salesOf(t);
   const steps=[
-    ['Gasto Total', brl(g), [], false, 'hl-gasto'],
+    ['Gasto Total', brl(g), [], false, 'hl-gasto', g],
     ['Impressões', intf(t.im), [['CPM',brl(dv.cpm)],['Frequência',NA]]],
     ['Cliques', intf(t.cl), [['CTR',pct(dv.ctr)],['CPC',brl(dv.cpc)]]],
     ['Page Views', intf(t.pv), [['CR',pct(dv.cr)],['CPV',brl(dv.cpv)]]],
@@ -890,9 +904,9 @@ function renderMeta(){
     ['Leads A', intf(dv.la), [['Tx‑A',pct(dv.txa)],['A:MQL',dv.amql!=null?nf2.format(dv.amql):'-'],['CPL‑A',brl(dv.cpla)]], false, 'hl-mql'],
     ['Agendamentos', s.agendamentos!=null?intf(s.agendamentos):NA, [['Tx‑Agend.',s.txag!=null?pct(s.txag):NA],['CPAG',s.cpag!=null?brl(s.cpag):NA]], s.agendamentos==null],
     ['Vendas', s.vendas!=null?intf(s.vendas):NA, [['ConvAGD',s.convagd!=null?pct(s.convagd):NA],['CAC',s.cac!=null?brl(s.cac):NA]], s.vendas==null],
-    ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat'],
+    ['Faturamento', s.fat!=null?brl(s.fat):NA, [['ROAS',s.roas!=null?numf(s.roas):NA],['Ticket',s.tm!=null?brl(s.tm):NA]], s.fat==null, 'hl-fat', s.fat],
   ];
-  document.getElementById('metaFunnel').innerHTML=funnelHTML(steps);
+  document.getElementById('metaFunnel').innerHTML=funnelHTML(steps); fitFunnelValues();
 
   comboChart('mCombo', daily(fL,fM,fS,fAg));
   // Mar02: barras de MQLs por anúncio (não leads)

@@ -112,7 +112,15 @@
      disponível — sem isso, o grid podia "vazar" e criar scroll horizontal na PÁGINA. */
   .two-col{grid-template-columns:380px minmax(0,1fr)}
   .three-col{grid-template-columns:360px minmax(0,1fr)}
-  .funnel-grid{grid-template-columns:300px minmax(0,1fr); align-items:start}
+  .funnel-grid{grid-template-columns:300px minmax(0,1fr); align-items:stretch}
+  /* painel (gráfico + tabela diária) com a MESMA altura da coluna de cards do funil:
+     50% gráfico / 50% tabela. contain:size => a altura do painel não influencia a linha do grid
+     (quem manda é o funil); min-height é só um piso. */
+  .funnel-grid > .panel{display:flex; flex-direction:column; contain:size; min-height:560px}
+  .funnel-grid > .panel > .panel-chart{flex:1 1 0; min-height:0; display:flex; flex-direction:column}
+  .funnel-grid > .panel > .panel-chart .chart-box{flex:1 1 0; height:auto; min-height:150px}
+  .funnel-grid > .panel > .tbl-wrap{flex:1 1 0; min-height:0; max-height:none}
+  .funnel-grid > .panel > .note{flex:0 0 auto}
   .funnel-charts{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-content:start}
   /* Mar02: três colunas de tamanho igual · Mar05: quatro gráficos na mesma linha */
   .trio{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; align-items:stretch}
@@ -121,7 +129,10 @@
   .trio > .card{display:flex; flex-direction:column; min-width:0}
   .trio > .card > .chart-box, .trio > .card > .donut-wrap, .trio > .card > .tbl-wrap{flex:1 1 auto; min-height:0}
   .row4{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; align-content:start}
-  @media(max-width:1000px){.two-col,.three-col,.funnel-grid{grid-template-columns:1fr}}
+  @media(max-width:1000px){.two-col,.three-col,.funnel-grid{grid-template-columns:1fr}
+    .funnel-grid > .panel{contain:none; min-height:0; display:block}
+    .funnel-grid > .panel > .panel-chart .chart-box{height:260px}
+    .funnel-grid > .panel > .tbl-wrap{max-height:250px}}
   @media(max-width:1200px){.funnel-charts{grid-template-columns:1fr}}
   @media(max-width:1200px){.trio{grid-template-columns:1fr} .row4{grid-template-columns:1fr 1fr}}
   @media(max-width:640px){.row4{grid-template-columns:1fr}}
@@ -161,7 +172,7 @@
   .step.hl-mql{background:var(--step-mql-bg); border-left-color:var(--step-mql-bd)}
   .step.hl-gasto{background:var(--step-gasto-bg); border-left-color:var(--step-gasto-bd)}
   .step.hl-fat{background:var(--step-fat-bg); border-left-color:var(--step-fat-bd)}
-  .step.hl-mql{flex-wrap:nowrap}
+  .step.hl-mql,.step.hl-fat,.step.hl-gasto{flex-wrap:nowrap}
   .step.hl-mql .m-val,.step.hl-gasto .m-val,.step.hl-fat .m-val{font-size:21px; font-weight:700}
   .step.hl-mql .m-label,.step.hl-gasto .m-label,.step.hl-fat .m-label{font-weight:600; color:var(--ink)}
   .step .step-main{min-width:0}
