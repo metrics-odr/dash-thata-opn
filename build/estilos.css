@@ -112,11 +112,19 @@
      disponível — sem isso, o grid podia "vazar" e criar scroll horizontal na PÁGINA. */
   .two-col{grid-template-columns:380px minmax(0,1fr)}
   .three-col{grid-template-columns:360px minmax(0,1fr)}
-  .funnel-grid{grid-template-columns:300px minmax(0,1fr); align-items:stretch}
+  .funnel-grid{grid-template-columns:350px minmax(0,1fr); align-items:stretch}
+  /* 1ª dobra: a seção inteira (cards + gráfico + tabela) ocupa exatamente a altura visível da tela;
+     os cards se distribuem uniformemente e o painel divide 50/50 gráfico/tabela */
+  .funnel-grid{height:calc(100vh - 150px); min-height:640px; grid-template-rows:minmax(0,1fr)}
+  .funnel-grid > .card{display:flex; flex-direction:column; min-height:0; overflow:auto}
+  .funnel-grid > .card .funnel{flex:1 1 auto; min-height:0; gap:6px}
+  .funnel-grid > .card .step{flex:1 1 0; min-height:48px; padding:6px 14px}
+  .funnel-grid > .card .step .s-label{margin-bottom:1px}
+  .funnel-grid > .card .note{flex:0 0 auto; font-size:10px; line-height:1.3; margin:8px 0 0}
   /* painel (gráfico + tabela diária) com a MESMA altura da coluna de cards do funil:
      50% gráfico / 50% tabela. contain:size => a altura do painel não influencia a linha do grid
      (quem manda é o funil); min-height é só um piso. */
-  .funnel-grid > .panel{display:flex; flex-direction:column; contain:size; min-height:560px}
+  .funnel-grid > .panel{display:flex; flex-direction:column; contain:size; min-height:0}
   .funnel-grid > .panel > .panel-chart{flex:1 1 0; min-height:0; display:flex; flex-direction:column}
   .funnel-grid > .panel > .panel-chart .chart-box{flex:1 1 0; height:auto; min-height:150px}
   .funnel-grid > .panel > .tbl-wrap{flex:1 1 0; min-height:0; max-height:none}
@@ -130,6 +138,8 @@
   .trio > .card > .chart-box, .trio > .card > .donut-wrap, .trio > .card > .tbl-wrap{flex:1 1 auto; min-height:0}
   .row4{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; align-content:start}
   @media(max-width:1000px){.two-col,.three-col,.funnel-grid{grid-template-columns:1fr}
+    .funnel-grid{height:auto; min-height:0; grid-template-rows:none}
+    .funnel-grid > .card .step{flex:none; padding:11px 15px}
     .funnel-grid > .panel{contain:none; min-height:0; display:block}
     .funnel-grid > .panel > .panel-chart .chart-box{height:260px}
     .funnel-grid > .panel > .tbl-wrap{max-height:250px}}
