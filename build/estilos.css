@@ -89,6 +89,15 @@
   .cur-opt:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-blue) 40%,transparent)}
   .cur-opt .cur-flag{width:15px; height:10px; border-radius:2px; flex:0 0 auto; display:block}
   .cur-opt.active{background:var(--accent-blue); color:#fff; font-weight:600}
+  /* larguras médias: compacta topbar/moeda para tudo caber sem vazar */
+  @media(max-width:1280px){
+    .topbar{gap:8px; padding:8px 12px}
+    .topbar .updated{display:none}
+    .topbar .btn{padding:7px 9px; font-size:12px}
+    .cur-opt{padding:4px 8px; font-size:11.5px; gap:4px}
+    .cur-opt .cur-flag{width:13px; height:9px}
+    .fx-rate{font-size:10px}
+  }
 
   /* ---------- Page content ---------- */
   .page-content{padding:24px 24px 60px}
