@@ -378,6 +378,49 @@ function lineChart(id, d){
       scales:{x:{ticks:{color:mut,font:{size:9}},grid:{display:false}},y:{ticks:{color:mut,font:{size:9}},grid:{color:cgrid()},beginAtZero:true}}}});
 }
 
+/* Indicadores por dia (aba Meta Ads): séries de taxas calculadas do `daily()`.
+   series: [{label,fn(x)->valor|null,type:'brl'|'pct',axis:'y'|'y1',color}] */
+function indChart(id, d, series){
+  destroy(id); const el=document.getElementById(id); if(!el) return;
+  const mut=cmuted(), dual=series.some(s=>s.axis==='y1');
+  const tick=t=>v=>t==='brl'?brl(v):pct(v);
+  charts[id]=new Chart(el,{type:'line',
+    data:{labels:d.map(x=>x.d.slice(5)), datasets:series.map(s=>({label:s.label,
+      data:d.map(x=>{const v=s.fn(x); return v==null||!isFinite(v)?null:v;}),
+      borderColor:s.color,backgroundColor:s.color,yAxisID:s.axis||'y',borderWidth:2,pointRadius:2,spanGaps:true,tension:.25}))},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:cink(),boxWidth:10,usePointStyle:true,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>{const s=series[c.datasetIndex]; return s.label+': '+(c.raw==null?'-':(s.type==='brl'?brl(c.raw):pct(c.raw)));}}}},
+      scales:Object.assign({x:{ticks:{color:mut,font:{size:10}},grid:{display:false}},
+        y:{position:'left',beginAtZero:true,ticks:{color:mut,font:{size:10},callback:tick(series[0].type)},grid:{color:cgrid()}}},
+        dual?{y1:{position:'right',beginAtZero:true,ticks:{color:mut,font:{size:10},callback:tick(series.find(s=>s.axis==='y1').type)},grid:{display:false}}}:{})}});
+}
+function renderIndicadores(d, t){
+  const pal=chartPalette(), dd=x=>derive(x);
+  indChart('mIndCpmCtr', d, [
+    {label:'CPM',fn:x=>dd(x).cpm,type:'brl',axis:'y',color:cvar('--chart-gasto')||pal[2]},
+    {label:'CTR',fn:x=>dd(x).ctr,type:'pct',axis:'y1',color:pal[0]}]);
+  // Com Landing Page (Page Views no período): Connect Rate + ConvLP.
+  // Sem LP: ConvForm = Leads / Cliques (o formulário recebe o clique direto).
+  const hasLP=t.pv>0, tEl=document.getElementById('mIndConvT'), hEl=document.getElementById('mIndConvH');
+  if(hasLP){
+    if(tEl) tEl.textContent='Connect Rate e ConvLP por dia';
+    if(hEl) hEl.textContent='CR = Page Views/Cliques · ConvLP = Leads/Page Views';
+    indChart('mIndConv', d, [
+      {label:'CR',fn:x=>dd(x).cr,type:'pct',color:pal[0]},
+      {label:'ConvLP',fn:x=>dd(x).convlp,type:'pct',color:pal[3]}]);
+  } else {
+    if(tEl) tEl.textContent='ConvForm por dia';
+    if(hEl) hEl.textContent='ConvForm = Leads/Cliques (sem Landing Page)';
+    indChart('mIndConv', d, [
+      {label:'ConvForm',fn:x=>x.cl?x.leads/x.cl:null,type:'pct',color:pal[3]}]);
+  }
+  // Tx‑MQL só quando há MQL no período
+  const mc=document.getElementById('mIndMqlCard'); if(mc) mc.style.display=t.mqls>0?'':'none';
+  if(t.mqls>0) indChart('mIndMql', d, [{label:'Tx‑MQL',fn:x=>dd(x).tx,type:'pct',color:pal[1]}]);
+  else destroy('mIndMql');
+}
+
 /* Donut de taxa de qualificação (Mar02): verde = MQL · vermelho = desqualificado */
 function donutQlf(id, mqls, leads){
   destroy(id); const el=document.getElementById(id); if(!el) return;
@@ -908,7 +951,9 @@ function renderMeta(){
   ];
   document.getElementById('metaFunnel').innerHTML=funnelHTML(steps); fitFunnelValues();
 
-  comboChart('mCombo', daily(fL,fM,fS,fAg));
+  const dMeta=daily(fL,fM,fS,fAg);
+  comboChart('mCombo', dMeta);
+  renderIndicadores(dMeta, t);
   // Mar02: barras de MQLs por anúncio (não leads)
   const mqlByAd={}; fL.forEach(l=>{ mqlByAd[l.ad]=(mqlByAd[l.ad]||0)+l.q; });
   hbar('mMqlAd', Object.entries(mqlByAd).map(([label,leads])=>({label,leads})), x=>x.leads, ()=>cvar('--chart-mqls'), 10, 'MQLs');
