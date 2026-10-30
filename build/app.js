@@ -1,6 +1,14 @@
 "use strict";
 const DATA = JSON.parse(document.getElementById('payload').textContent);
-const LEADS = DATA.leads, META = DATA.meta, SALES = DATA.sales||[], AGD = DATA.agendamentos||[], B = DATA.build;
+const B = DATA.build;
+/* dois funis na mesma base: 'sessao' (arrays do topo do payload) e 'apd'
+   (Aplicação Direta, DATA.apd). setFunnel() troca os arrays ativos. */
+let LEADS, META, SALES, AGD;
+function setFunnelData(f){
+  const src = f==='apd' ? (DATA.apd||{}) : DATA;
+  LEADS=src.leads||[]; META=src.meta||[]; SALES=src.sales||[]; AGD=src.agendamentos||[];
+  AD_LINKS=src.ad_links||{}; AD_STATUS=src.ad_status||{};
+}
 const USD_RATE = B.usd_brl_rate || 5.30;   // gasto (meta[].sp) é USD nativo; toggle de moeda converte ao vivo
 
 /* ---------------- format ---------------- */
@@ -28,7 +36,7 @@ const TODAY = B.today || B.date_max;
 
 /* ---------------- STATE ---------------- */
 const STATE = {
-  page:'geral', from:(()=>{const [y,m]=TODAY.split('-'); return `${y}-${m}-01`;})(), to:TODAY, preset:'mes',
+  funnel:'sessao', page:'geral', from:(()=>{const [y,m]=TODAY.split('-'); return `${y}-${m}-01`;})(), to:TODAY, preset:'mes',
   currency:'BRL',   // 'BRL' | 'USD' — toggle da topbar
   selDays:new Set(),
   mSelC:new Set(), mSelA:new Set(), mSelAd:new Set(),
@@ -583,8 +591,8 @@ function renderGeralCore(ids){
 /* ---------------- PAGE 3: Relatório ----------------
    Espelha a Visão Geral (renderGeralCore com IDs próprios) e, abaixo, acrescenta
    Top Anúncios · Piores Anúncios · Briefing do Gestor. */
-const AD_LINKS = DATA.ad_links || {};
-const AD_STATUS = DATA.ad_status || {};
+let AD_LINKS = {}, AD_STATUS = {};
+setFunnelData('sessao');
 const SAMPLE_MIN_SPEND = (B.sample_min_spend!=null?B.sample_min_spend:100);
 const SAMPLE_MIN_MQLS  = (B.sample_min_mqls!=null?B.sample_min_mqls:3);
 const escHtml=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1127,14 +1135,20 @@ function ppApply(){
 }
 
 /* ---------------- navigation & boot ---------------- */
-function setPage(p){ STATE.page=p;
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));
+const PAGE_TITLES={geral:'Visão Geral', meta:'Meta Ads', rel:'Insights de IA'};
+const FUNNEL_TITLES={sessao:'Sessão Estratégica', apd:'Aplicação Direta'};
+function setPage(p,f){
+  f = f||STATE.funnel; if(f==='apd' && p==='rel') p='geral';   // Insights só existe na Sessão
+  if(f!==STATE.funnel){ STATE.funnel=f; setFunnelData(f);
+    STATE.mSelC.clear(); STATE.mSelA.clear(); STATE.mSelAd.clear(); STATE.selDays.clear(); }
+  STATE.page=p;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p&&n.dataset.funnel===f));
   document.getElementById('page-geral').classList.toggle('active',p==='geral');
   document.getElementById('page-meta').classList.toggle('active',p==='meta');
   document.getElementById('page-rel').classList.toggle('active',p==='rel');
-  document.getElementById('ptitle').textContent = p==='meta'?'Meta Ads':(p==='rel'?'Insights de IA':'Visão Geral');
+  document.getElementById('ptitle').textContent = (f==='apd'?FUNNEL_TITLES.apd+' · ':'')+PAGE_TITLES[p];
   document.getElementById('navToggle').checked=false;
-  history.replaceState(null,'', p==='meta'?'#meta':(p==='rel'?'#rel':'#geral'));
+  history.replaceState(null,'', '#'+(f==='apd'?'apd-':'')+p);
   renderAll();
 }
 function renderAll(){ if(STATE.page==='meta') renderMeta(); else if(STATE.page==='rel') renderRelatorio(); else renderGeral(); }
@@ -1143,7 +1157,7 @@ function applyTheme(){ const t=localStorage.getItem('dm_theme'); if(t==='light')
 applyTheme();
 document.getElementById('themeBtn').addEventListener('click',()=>{ const dark=document.documentElement.getAttribute('data-theme')==='dark'; localStorage.setItem('dm_theme',dark?'light':'dark'); applyTheme(); renderAll(); });
 
-document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setPage(n.dataset.page)));
+document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setPage(n.dataset.page,n.dataset.funnel)));
 /* toggle de moeda BRL/USD. Gasto do
    Meta Ads é nativo em USD (meta[].sp); "on" = BRL (multiplica pela cotação
    B.usd_brl_rate), "off" = USD nativo. */
@@ -1190,7 +1204,8 @@ document.getElementById('buildFoot').textContent='build __BUILD_ID__';
 document.getElementById('buildFoot2').textContent='· build __BUILD_ID__';
 
 syncDateInputs();
-setPage(location.hash==='#meta'?'meta':(location.hash==='#rel'?'rel':'geral'));
+{ const h=location.hash.replace('#',''), f=h.startsWith('apd-')?'apd':'sessao', pg=h.replace('apd-','');
+  setPage(PAGE_TITLES[pg]?pg:'geral', f); }
 
 /* auto-refresh com cache-bust ~30 min */
 setTimeout(()=>{ location.href=location.pathname+'?t='+Date.now()+location.hash; }, 30*60*1000);
