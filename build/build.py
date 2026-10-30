@@ -78,6 +78,11 @@ SPREADSHEET_ID_META = "14yy7dhldcjPC2VzkXOfzGaS-kdqn5c3y3GWOm4vGj3c"   # planilh
 SPREADSHEET_ID_LEADS = "1v3mc-Z3lUYzGGkyIIYdK9PL3M-O6cgIBTlUWHQDboGU"  # "Central de Eventos - 2026"
 
 GID_META = "0"                  # aba unica da planilha Meta Ads
+# Meta Ads da Aplicação Direta (APD): base PRÓPRIA de queries do Meta (outra
+# planilha/aba). <<PREENCHER: ID/gid da planilha Meta Ads da APD>> — enquanto
+# estiver vazio, a dash APD mostra leads/agendamentos/vendas mas sem gasto.
+SPREADSHEET_ID_META_APD = ""
+GID_META_APD = "0"
 GID_LEADS = "0"                 # aba "Central de Leads" (fonte principal)
 GID_AGENDAMENTOS = "1722749521"  # aba "Agendamentos" (Calendly)
 # VENDAS: planilha própria "Controle Alunas MBA - a partir de agosto" (aba "geral"),
@@ -270,6 +275,12 @@ def is_sessao_funil(v: str | None) -> bool:
     return norm(v) == "sessao"
 
 
+def is_aplicacao_funil(v: str | None) -> bool:
+    """Funil "Aplicação" (Aplicação Direta/APD): mesma Central de Leads, só as
+    linhas cuja coluna "Funil" (ou "Funil Nota" em Agendamentos) == "Aplicação"."""
+    return norm(v) == "aplicacao"
+
+
 def is_mba_sale(v: str | None) -> bool:
     """Filtro de produto em "Compradores": esta dash considera SÓ as vendas do
     MBA (coluna "Produto" contendo "mba", case/acento-insensitive) — outras
@@ -366,7 +377,7 @@ def cell(row, i):
 # --------------------------------------------------------------------------- #
 # Central de Leads -> lista de leads + índices de atribuição (telefone/e-mail)
 # --------------------------------------------------------------------------- #
-def read_leads(leads_rows):
+def read_leads(leads_rows, funil_ok=is_sessao_funil, label="Sessão"):
     """Lê a aba "Central de Leads". Colunas (nesta ordem):
     Data, Nome, Email, Telefone, Funil, Página, Qualificação, Lead Scoring,
     UTM Source, UTM Medium, UTM Campaign, UTM Content, UTM Term, UTM id,
@@ -403,7 +414,7 @@ def read_leads(leads_rows):
     for row in rows_sorted:
         if is_test_lead(" ".join(str(c) for c in row)):
             continue
-        if not is_sessao_funil(cell(row, idx["funil"])):
+        if not funil_ok(cell(row, idx["funil"])):
             ignored_funil += 1
             continue
         campaign_raw = cell(row, idx["campaign"])
@@ -442,7 +453,7 @@ def read_leads(leads_rows):
             "em": "—",
             "ph": mask_phone(cell(row, idx["phone"])),
         })
-    print(f"  leads ignorados por Funil != Sessão: {ignored_funil}", file=sys.stderr)
+    print(f"  leads ignorados por Funil != {label}: {ignored_funil}", file=sys.stderr)
     return leads, phone_attrib, email_attrib
 
 
@@ -455,7 +466,7 @@ def attrib_for(phone_attrib, email_attrib, phone, email, no_attrib):
 # --------------------------------------------------------------------------- #
 # Agendamentos (Calendly) -> registros por agendamento (não agregado)
 # --------------------------------------------------------------------------- #
-def read_agendamentos(agd_rows, phone_attrib, email_attrib):
+def read_agendamentos(agd_rows, phone_attrib, email_attrib, funil_ok=is_sessao_funil, label="Sessão"):
     """Lê a aba "Agendamentos". Colunas:
     ID Calendly, Data, Dia da Semana, Hora Início, Hora Fim, Consultora,
     Tipo de Evento, Convidado, Email, Telefone/WhatsApp, Status, Cancelado
@@ -487,7 +498,7 @@ def read_agendamentos(agd_rows, phone_attrib, email_attrib):
     for row in agd_rows[1:]:
         if not any((c or "").strip() for c in row):
             continue
-        if not is_sessao_funil(cell(row, idx["funil_nota"])):
+        if not funil_ok(cell(row, idx["funil_nota"])):
             ignored_funil += 1
             continue
         total += 1
@@ -506,21 +517,25 @@ def read_agendamentos(agd_rows, phone_attrib, email_attrib):
         })
     print(f"  agendamentos atribuídos a anúncio: {matched}/{total} (cruzamento telefone OU e-mail)",
           file=sys.stderr)
-    print(f"  agendamentos ignorados por Funil Nota != Sessão: {ignored_funil}", file=sys.stderr)
+    print(f"  agendamentos ignorados por Funil Nota != {label}: {ignored_funil}", file=sys.stderr)
     return out
 
 
 # --------------------------------------------------------------------------- #
 # Compradores -> registros por venda (não agregado)
 # --------------------------------------------------------------------------- #
-def read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate):
+def read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate, apd_attribs=None):
     """Lê a planilha de vendas "Controle Alunas MBA". Colunas:
     Nome, E-mail, Whatsapp, Data da venda, Produto, Ticket.
     "Ticket" é em BRL; como "fat" é USD nativo em todo o app (o toggle de moeda
     converte no app.js), divide-se por usd_brl_rate aqui — no toggle BRL o valor
     volta exato ao Ticket da planilha. Cruza com a Central de Leads por telefone
     OU e-mail (atribuição de campanha/conjunto/anúncio). Toda linha com Ticket
-    ou e-mail/telefone conta como venda; só entra Produto contendo "mba"."""
+    ou e-mail/telefone conta como venda; só entra Produto contendo "mba".
+    Retorna (vendas_sessao, vendas_apd). Cada venda vai para UM funil só: se o
+    contato casa com um lead de Sessão, é de Sessão; senão, se casa com um lead
+    de Aplicação (apd_attribs = (phone_attrib, email_attrib)), é da APD; sem
+    casamento nenhum fica em Sessão como "(sem campanha)" (comportamento antigo)."""
     header = sales_rows[0] if sales_rows else []
     idx = header_index(
         header,
@@ -532,6 +547,7 @@ def read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate):
     NO_ATTRIB = {"src": "org", "camp": "(sem campanha)", "adset": "(sem conjunto)",
                  "ad": "(sem anúncio)", "d": None}
     out = []
+    out_apd = []
     matched = 0
     total = 0
     skipped_produto = 0
@@ -546,11 +562,16 @@ def read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate):
         phone = canon_phone(cell(row, idx["phone"]))
         email = norm_email(cell(row, idx["email"]))
         attrib = attrib_for(phone_attrib, email_attrib, phone, email, NO_ATTRIB)
+        target = out
+        if attrib is NO_ATTRIB and apd_attribs:
+            attrib = attrib_for(apd_attribs[0], apd_attribs[1], phone, email, NO_ATTRIB)
+            if attrib is not NO_ATTRIB:
+                target = out_apd
         if attrib is not NO_ATTRIB:
             matched += 1
         else:
             unmatched_log.append((cell(row, idx["date"]), first_last_initial(cell(row, idx["name"])), phone))
-        out.append({
+        target.append({
             "d": parse_date(cell(row, idx["date"])) or attrib["d"],
             "src": attrib["src"], "camp": attrib["camp"], "adset": attrib["adset"], "ad": attrib["ad"],
             "vendas": 1,
@@ -564,7 +585,8 @@ def read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate):
               file=sys.stderr)
         for d, nm, phone in unmatched_log:
             print(f"    - {d or '?'}  {nm}  tel …{phone[-4:] if len(phone) >= 4 else phone}", file=sys.stderr)
-    return out
+    print(f"  vendas atribuídas à Aplicação Direta: {len(out_apd)}", file=sys.stderr)
+    return out, out_apd
 
 
 # --------------------------------------------------------------------------- #
@@ -628,16 +650,23 @@ def read_meta(meta_rows):
 # --------------------------------------------------------------------------- #
 # Processamento -> registros brutos
 # --------------------------------------------------------------------------- #
-def process(leads_rows, meta_rows, agendamentos_rows, sales_rows):
+def process(leads_rows, meta_rows, agendamentos_rows, sales_rows, meta_apd_rows=None):
     leads, phone_attrib, email_attrib = read_leads(leads_rows)
     meta, ad_links, ad_status = read_meta(meta_rows)
     agendamentos = read_agendamentos(agendamentos_rows, phone_attrib, email_attrib) if agendamentos_rows else []
     usd_brl_rate = fetch_usd_brl_rate()
-    sales = read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate) if sales_rows else []
+    # Aplicação Direta (APD): mesma Central de Leads/Agendamentos, outro funil
+    leads_apd, phone_apd, email_apd = read_leads(leads_rows, is_aplicacao_funil, "Aplicação")
+    agd_apd = read_agendamentos(agendamentos_rows, phone_apd, email_apd, is_aplicacao_funil, "Aplicação") if agendamentos_rows else []
+    meta_apd, links_apd, status_apd = read_meta(meta_apd_rows) if meta_apd_rows else ([], {}, {})
+    sales, sales_apd = read_sales(sales_rows, phone_attrib, email_attrib, usd_brl_rate,
+                                  (phone_apd, email_apd)) if sales_rows else ([], [])
 
     dates = sorted({d for d in (
         [l["d"] for l in leads if l["d"]] + [m["d"] for m in meta if m["d"]] +
-        [s["d"] for s in sales if s["d"]] + [a["d"] for a in agendamentos if a["d"]]
+        [s["d"] for s in sales if s["d"]] + [a["d"] for a in agendamentos if a["d"]] +
+        [l["d"] for l in leads_apd if l["d"]] + [m["d"] for m in meta_apd if m["d"]] +
+        [s["d"] for s in sales_apd if s["d"]] + [a["d"] for a in agd_apd if a["d"]]
     )})
     now_brt = datetime.now(BRT)
     return {
@@ -664,6 +693,11 @@ def process(leads_rows, meta_rows, agendamentos_rows, sales_rows):
         "ad_links": ad_links,
         "ad_status": ad_status,
         "briefings": {},
+        # Aplicação Direta: mesmo formato dos arrays do topo (que são da Sessão)
+        "apd": {
+            "leads": leads_apd, "meta": meta_apd, "sales": sales_apd,
+            "agendamentos": agd_apd, "ad_links": links_apd, "ad_status": status_apd,
+        },
     }
 
 
@@ -708,6 +742,7 @@ def main():
     ap.add_argument("--meta-file", help="CSV local da planilha Meta Ads")
     ap.add_argument("--agendamentos-file", help="CSV local da aba \"Agendamentos\" (Calendly)")
     ap.add_argument("--sales-file", help="CSV local da aba \"Compradores\"")
+    ap.add_argument("--meta-apd-file", help="CSV local do Meta Ads da Aplicação Direta (APD)")
     ap.add_argument("--template", default="build/template.html")
     ap.add_argument("--out", default="dist/index.html")
     args = ap.parse_args()
@@ -717,7 +752,13 @@ def main():
     agendamentos_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_LEADS, gid=GID_AGENDAMENTOS), args.agendamentos_file)
     sales_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_SALES, gid=GID_SALES), args.sales_file)
 
-    data = process(leads_rows, meta_rows, agendamentos_rows, sales_rows)
+    meta_apd_rows = None
+    if args.meta_apd_file or SPREADSHEET_ID_META_APD:
+        meta_apd_rows = load_rows(EXPORT_URL.format(sid=SPREADSHEET_ID_META_APD, gid=GID_META_APD), args.meta_apd_file)
+    else:
+        print("  [apd] SPREADSHEET_ID_META_APD vazio: Aplicação Direta sem dados de mídia (gasto)", file=sys.stderr)
+
+    data = process(leads_rows, meta_rows, agendamentos_rows, sales_rows, meta_apd_rows)
 
     briefings_path = os.path.join(os.path.dirname(os.path.abspath(args.template)), "relatorios.json")
     data["briefings"] = load_briefings(briefings_path)
@@ -740,6 +781,8 @@ def main():
     print(f"  agend.    : {ag}  reuniões realizadas: {re_}", file=sys.stderr)
     print(f"  vendas    : {vd}  faturamento: US$ {fat:,.2f}", file=sys.stderr)
     print(f"  meta      : {len(data['meta'])} linhas  usd_brl_rate: {b['usd_brl_rate']}", file=sys.stderr)
+    ap_ = data["apd"]
+    print(f"  APD       : leads {len(ap_['leads'])} · agend. {len(ap_['agendamentos'])} · vendas {len(ap_['sales'])} · meta {len(ap_['meta'])} linhas", file=sys.stderr)
     print(f"  out       : {args.out}", file=sys.stderr)
 
 

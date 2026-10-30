@@ -186,6 +186,18 @@ conversão por dependerem de gasto/fat). A cotação vigente (dinâmica, vinda d
 `DATA.build.usd_brl_rate`) aparece como texto abaixo do seletor (`#fxRate` em
 `template.html`, preenchido em `app.js`).
 
+### Aplicação Direta (APD) — segundo funil na mesma dash
+Sidebar tem 2 seções: **Sessão Estratégica** (Visão Geral · Meta Ads · Insights de IA) e
+**Aplicação Direta** (Visão Geral · Meta Ads). A APD usa a MESMA Central de Leads/Agendamentos,
+filtrando `Funil` == "Aplicação" (leads) e `Funil Nota` == "Aplicação" (agendamentos) —
+`is_aplicacao_funil()` em `build.py`. O payload traz a Sessão nos arrays do topo e a APD em
+`DATA.apd` (`leads/meta/sales/agendamentos/ad_links/ad_status`); `app.js::setFunnelData()` troca
+os arrays ativos (`STATE.funnel`, hash `#apd-geral`/`#apd-meta`). Insights de IA só existe na Sessão.
+**Meta Ads da APD** vem de OUTRA base: `SPREADSHEET_ID_META_APD`/`GID_META_APD` em `build.py`
+(**<<PREENCHER>>** — vazio = APD sem gasto; também `--meta-apd-file` p/ teste local).
+Vendas (planilha MBA) vão para UM funil só: casou com lead de Sessão → Sessão; senão casou com lead
+de Aplicação → APD; sem casamento → Sessão como "(sem campanha)".
+
 ### Convenções de campanha (do cliente)
 Campanhas usam dois prefixos — `OPN` e `OPNF` (`MAIN_PRODUCT_PREFIX = "OPN"` é
 só documental/label) — tratados como **1 cliente só**, sem filtrar por
