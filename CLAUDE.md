@@ -194,7 +194,7 @@ filtrando `Funil` == "Aplicação" (leads) e `Funil Nota` == "Aplicação" (agen
 `DATA.apd` (`leads/meta/sales/agendamentos/ad_links/ad_status`); `app.js::setFunnelData()` troca
 os arrays ativos (`STATE.funnel`, hash `#apd-geral`/`#apd-meta`). Insights de IA só existe na Sessão.
 **Meta Ads da APD** vem de OUTRA base: `SPREADSHEET_ID_META_APD`/`GID_META_APD` em `build.py`
-(**<<PREENCHER>>** — vazio = APD sem gasto; também `--meta-apd-file` p/ teste local).
+(aba "Queries APD" = gid `9351468` da mesma planilha Meta Ads; vazio = APD sem gasto; também `--meta-apd-file` p/ teste local).
 Vendas (planilha MBA) vão para UM funil só: casou com lead de Sessão → Sessão; senão casou com lead
 de Aplicação → APD; sem casamento → Sessão como "(sem campanha)".
 

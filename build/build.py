@@ -79,10 +79,10 @@ SPREADSHEET_ID_LEADS = "1v3mc-Z3lUYzGGkyIIYdK9PL3M-O6cgIBTlUWHQDboGU"  # "Centra
 
 GID_META = "0"                  # aba unica da planilha Meta Ads
 # Meta Ads da Aplicação Direta (APD): base PRÓPRIA de queries do Meta (outra
-# planilha/aba). <<PREENCHER: ID/gid da planilha Meta Ads da APD>> — enquanto
-# estiver vazio, a dash APD mostra leads/agendamentos/vendas mas sem gasto.
-SPREADSHEET_ID_META_APD = ""
-GID_META_APD = "0"
+# planilha/aba).
+# Vazio = a dash APD mostra leads/agendamentos/vendas mas sem gasto.
+SPREADSHEET_ID_META_APD = "14yy7dhldcjPC2VzkXOfzGaS-kdqn5c3y3GWOm4vGj3c"   # mesma planilha do Meta Ads, aba "Queries APD"
+GID_META_APD = "9351468"
 GID_LEADS = "0"                 # aba "Central de Leads" (fonte principal)
 GID_AGENDAMENTOS = "1722749521"  # aba "Agendamentos" (Calendly)
 # VENDAS: planilha própria "Controle Alunas MBA - a partir de agosto" (aba "geral"),
