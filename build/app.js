@@ -927,7 +927,10 @@ function dailyCells(x,d,isTotal){
 /* Mar04: considera TODOS os leads e TODO o gasto de todas as fontes de tráfego
    (sem filtrar por atribuição). Hoje só há Meta; quando vier google/tiktok/orgânico
    etc., já entram automaticamente. */
-function metaScope(ex){ let fL=leadsActive(), fM=metaActive(), fS=salesActive(), fAg=agdActive();
+/* página Meta Ads = SÓ mídia paga: leads/vendas/agendamentos orgânicos (src 'org',
+   sem campanha/UTM) ficam só na Visão Geral. */
+const paidOnly = r=>r.src!=='org';
+function metaScope(ex){ let fL=leadsActive().filter(paidOnly), fM=metaActive(), fS=salesActive().filter(paidOnly), fAg=agdActive().filter(paidOnly);
   if(ex!=='C'&&STATE.mSelC.size){ fL=fL.filter(r=>STATE.mSelC.has(r.camp)); fM=fM.filter(r=>STATE.mSelC.has(r.camp)); fS=fS.filter(r=>STATE.mSelC.has(r.camp)); fAg=fAg.filter(r=>STATE.mSelC.has(r.camp)); }
   if(ex!=='A'&&STATE.mSelA.size){ fL=fL.filter(r=>STATE.mSelA.has(r.adset)); fM=fM.filter(r=>STATE.mSelA.has(r.adset)); fS=fS.filter(r=>STATE.mSelA.has(r.adset)); fAg=fAg.filter(r=>STATE.mSelA.has(r.adset)); }
   if(ex!=='D'&&STATE.mSelAd.size){ fL=fL.filter(r=>STATE.mSelAd.has(r.ad)); fM=fM.filter(r=>STATE.mSelAd.has(r.ad)); fS=fS.filter(r=>STATE.mSelAd.has(r.ad)); fAg=fAg.filter(r=>STATE.mSelAd.has(r.ad)); }
