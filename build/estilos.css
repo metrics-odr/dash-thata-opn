@@ -113,7 +113,7 @@
      disponível — sem isso, o grid podia "vazar" e criar scroll horizontal na PÁGINA. */
   .two-col{grid-template-columns:380px minmax(0,1fr)}
   .three-col{grid-template-columns:360px minmax(0,1fr)}
-  .funnel-grid{grid-template-columns:350px minmax(0,1fr); align-items:stretch}
+  .funnel-grid{grid-template-columns:260px minmax(0,1fr); align-items:stretch}
   /* 1ª dobra: a seção inteira (cards + gráfico + tabela) ocupa exatamente a altura visível da tela;
      os cards se distribuem uniformemente e o painel divide 50/50 gráfico/tabela */
   .funnel-grid{height:calc(100vh - 150px); min-height:640px; grid-template-rows:minmax(0,1fr)}
@@ -232,11 +232,11 @@
   /* Tabelas "fit": cabem 100% na largura (SEM scroll lateral); colunas numéricas
      uniformes, dimensão quebra linha. Mais densas para caber muitas colunas. */
   table.dt.dt-fit{width:100%; table-layout:fixed}
-  table.dt.dt-fit th, table.dt.dt-fit td{padding:6px 5px; font-size:11px}
+  table.dt.dt-fit th, table.dt.dt-fit td{padding:6px 3px; font-size:11px}
   table.dt.dt-fit td{overflow:hidden; text-overflow:ellipsis}
   table.dt.dt-fit td.dim{white-space:normal; word-break:break-word}
   /* cabeçalho denso: fonte menor, sem espaçamento e podendo quebrar (não corta o nome) */
-  table.dt.dt-fit thead th{font-size:10px; letter-spacing:0; white-space:normal; line-height:1.12; padding:6px 4px; vertical-align:bottom}
+  table.dt.dt-fit thead th{font-size:10px; letter-spacing:0; white-space:normal; line-height:1.12; padding:6px 3px; vertical-align:bottom}
   table.dt.dt-fit thead th .rsz{display:none}   /* sem redimensionar quando é fit-to-width */
   /* Donut de taxa de qualificação (Mar02) com rótulo central */
   .donut-wrap{position:relative; height:190px}

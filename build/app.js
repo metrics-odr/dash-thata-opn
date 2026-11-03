@@ -215,7 +215,15 @@ function renderTable(cfg){
   const fmt=(t,v)=> t==='brl'?brl(v):t==='pct'?pct(v):t==='int'?intf(v):t==='num'?numf(v):t==='date'?brdate(v):t==='html'?(v==null?'-':String(v)):dimf(v);
   const widths=fit?[]:cfg.cols.map(c=>colWidth(cfg,c)); const totalW=widths.reduce((a,b)=>a+b,0);
   // modo fit: dimensão/data com largura fixa; colunas numéricas dividem o resto por igual
-  const fitW=c=> c.w?c.w+'px' : c.type==='date'?'74px' : c.type==='dim'?(c.big?'210px':'116px') : '';
+  // colunas numéricas dividem o espaço restante PROPORCIONAL ao conteúdo (R$ > % > inteiros),
+  // — assim valores em R$ não ficam espremidos nem causam scroll lateral.
+  const fixedW=c=> c.w?c.w : c.type==='date'?68 : c.type==='dim'?(c.big?210:116) : 0;
+  const wgt=c=> c.type==='brl'?1.7 : c.type==='pct'?1.25 : 1;
+  const fixedSum=fit?cfg.cols.reduce((a,c)=>a+fixedW(c),0):0;
+  const wgtSum=fit?cfg.cols.reduce((a,c)=>a+(fixedW(c)?0:wgt(c)),0):0;
+  // calc() com % não funciona em <col> (Chrome ignora) -> tudo em %, com base na largura atual do container
+  const baseW=fit?(table.parentElement.clientWidth||1000):1000;
+  const fitW=c=> fixedW(c)? (fixedW(c)/baseW*100).toFixed(3)+'%' : ((baseW-fixedSum)*wgt(c)/wgtSum/baseW*100).toFixed(3)+'%';
   const colgroup='<colgroup>'+cfg.cols.map((c,i)=>{
     const w=fit?fitW(c):(widths[i]+'px'); return `<col${w?` style="width:${w}"`:''}>`;
   }).join('')+'</colgroup>';
@@ -902,7 +910,7 @@ function renderRelatorio(){
 
 /* colunas padrão das tabelas de heatmap por dia (ordem pedida) */
 const DAILY_COLS=[
-  {key:'date',label:'Data',type:'date'},{key:'wd',label:'Dia',type:'dim',w:70},
+  {key:'date',label:'Data',type:'date'},{key:'wd',label:'Dia',type:'dim',w:46},
   {key:'gasto',label:'Gasto',type:'brl',heat:'gasto'},{key:'cpm',label:'CPM',type:'brl'},
   {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
   {key:'leads',label:'Leads',type:'int',heat:'leads'},{key:'cpl',label:'CPL',type:'brl'},
