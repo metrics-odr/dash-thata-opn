@@ -419,14 +419,20 @@ def read_leads(leads_rows, funil_ok=is_sessao_funil, label="Sessão"):
             continue
         campaign_raw = cell(row, idx["campaign"])
         campaign_valid = valid_utm(campaign_raw)
-        src = "meta" if campaign_valid else "org"
+        # Origem paga: campanha UTM válida OU UTM Source de Meta/Facebook/Instagram.
+        # Muitos leads vêm com utm_source=Facebook-Ads mas sem utm_campaign (UTM
+        # truncada) — antes caíam como "org" e sumiam da contagem de mídia paga.
+        src_n = norm(cell(row, idx["utm_source"]))
+        src_meta = bool(re.search(r"facebook|instagram|\bmeta\b|\bfb\b|\big\b", src_n))
+        src = "meta" if (campaign_valid or src_meta) else "org"
         phone = canon_phone(cell(row, idx["phone"]))
         email = norm_email(cell(row, idx["email"]))
         camp = campaign_raw if campaign_valid else "(sem campanha)"
         adset = cell(row, idx["utm_medium"]) if campaign_valid else "(sem conjunto)"
-        if not adset:
+        if not adset or not campaign_valid:
             adset = "(sem conjunto)"
         ad = cell(row, idx["ad"]) if campaign_valid else "(sem anúncio)"
+        ad = ad or "(sem anúncio)"
         lead_date = parse_date(cell(row, idx["created"]))
         attrib = {"src": src, "camp": camp, "adset": adset, "ad": ad, "d": lead_date}
         if phone and phone not in phone_attrib:
