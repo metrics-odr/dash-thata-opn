@@ -68,6 +68,7 @@ import sys
 import time
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
@@ -343,6 +344,16 @@ def first_last_initial(name: str) -> str:
     return parts[0] if len(parts) == 1 else f"{parts[0]} {parts[-1][:1]}."
 
 
+def clean_utm(s: str | None) -> str:
+    """UTMs de leads às vezes chegam URL-encoded ("+" no lugar de espaço,
+    "%7C" no lugar de "|"). Decodifica para casar com os nomes do Meta Ads
+    (que têm espaços) e colapsa espaços repetidos."""
+    s = (s or "").strip()
+    if "+" in s or "%" in s:
+        s = urllib.parse.unquote_plus(s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def valid_utm(campaign: str) -> bool:
     c = norm(campaign)
     return bool(c) and c not in ("-", "—", "nao encontrado")
@@ -417,7 +428,7 @@ def read_leads(leads_rows, funil_ok=is_sessao_funil, label="Sessão"):
         if not funil_ok(cell(row, idx["funil"])):
             ignored_funil += 1
             continue
-        campaign_raw = cell(row, idx["campaign"])
+        campaign_raw = clean_utm(cell(row, idx["campaign"]))
         campaign_valid = valid_utm(campaign_raw)
         # Origem paga: campanha UTM válida OU UTM Source de Meta/Facebook/Instagram.
         # Muitos leads vêm com utm_source=Facebook-Ads mas sem utm_campaign (UTM
@@ -428,10 +439,10 @@ def read_leads(leads_rows, funil_ok=is_sessao_funil, label="Sessão"):
         phone = canon_phone(cell(row, idx["phone"]))
         email = norm_email(cell(row, idx["email"]))
         camp = campaign_raw if campaign_valid else "(sem campanha)"
-        adset = cell(row, idx["utm_medium"]) if campaign_valid else "(sem conjunto)"
+        adset = clean_utm(cell(row, idx["utm_medium"])) if campaign_valid else "(sem conjunto)"
         if not adset or not campaign_valid:
             adset = "(sem conjunto)"
-        ad = cell(row, idx["ad"]) if campaign_valid else "(sem anúncio)"
+        ad = clean_utm(cell(row, idx["ad"])) if campaign_valid else "(sem anúncio)"
         ad = ad or "(sem anúncio)"
         lead_date = parse_date(cell(row, idx["created"]))
         attrib = {"src": src, "camp": camp, "adset": adset, "ad": ad, "d": lead_date}
