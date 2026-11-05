@@ -466,6 +466,7 @@ def read_leads(leads_rows, funil_ok=is_sessao_funil, label="Sessão"):
             "q": 1 if is_mql(cell(row, idx["qualif"])) else 0,
             "a": 1 if is_lead_a(cell(row, idx["scoring"])) else 0,
             "utm": 1 if campaign_valid else 0,
+            "us": clean_utm(cell(row, idx["utm_source"])) or "—",
             "nm": first_last_initial(cell(row, idx["name"])),
             "em": "—",
             "ph": mask_phone(cell(row, idx["phone"])),
