@@ -1006,13 +1006,14 @@ function renderMeta(){
   // dim+Gasto ficam sticky (stk:'l') na borda esquerda; as demais colunas
   // rolam horizontalmente dentro da MESMA tabela (ver stkOffsets em renderTable).
   const hcols=[
-    {key:'dim',label:'',type:'dim',big:true,stk:'l'},{key:'gasto',label:'Gasto',type:'brl',stk:'l'},
+    {key:'dim',label:'',type:'dim',big:true,stk:'l'},{key:'gasto',label:'Gasto',type:'brl',stk:'l',heat:'gasto'},
     {key:'cpm',label:'CPM',type:'brl'},
     {key:'ctr',label:'CTR',type:'pct'},{key:'cr',label:'CR',type:'pct'},{key:'convlp',label:'ConvLP',type:'pct'},
-    {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl'},
+    {key:'leads',label:'Leads',type:'int'},{key:'cpl',label:'CPL',type:'brl',heat:'leads'},
     {key:'tx',label:'Tx‑MQL',type:'pct'},
-    {key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl'},
+    {key:'mqls',label:'MQLs',type:'int'},{key:'cpmql',label:'CPMQL',type:'brl',heat:'mqls'},
     {key:'la',label:'Leads A',type:'int'},{key:'txa',label:'Tx‑A',type:'pct'},{key:'amql',label:'A:MQL',type:'num'},{key:'cpla',label:'CPL‑A',type:'brl'},
+    {key:'cpag',label:'CPAGD',type:'brl',heat:'agd'},
     {key:'convagd',label:'ConvAGD',type:'pct'},{key:'vendas',label:'Vendas',type:'int'},{key:'cac',label:'CAC',type:'brl'},
     {key:'fat',label:'Fat.',type:'brl'},{key:'roas',label:'ROAS',type:'num'},
   ];
@@ -1022,13 +1023,13 @@ function renderMeta(){
   function hierRows(map,extra){ return Object.entries(map).map(([k,a])=>{const d=derive(a),s=salesOf(a);
     return {k, cells:{dim:k,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:a.leads,cpl:d.cpl,tx:d.tx,mqls:a.mqls,cpmql:d.cpmql,
       la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
-      convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas,
+      cpag:s.cpag,convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas,
       ...(extra?extra(k):{})}};}); }
   function totRowOf(tt){const d=derive(tt),s=salesOf(tt);return{dim:null,gasto:d.gasto,cpm:d.cpm,ctr:d.ctr,cr:d.cr,convlp:d.convlp,leads:tt.leads,cpl:d.cpl,tx:d.tx,mqls:tt.mqls,cpmql:d.cpmql,
     la:d.la,txa:d.txa,amql:d.amql,cpla:d.cpla,
-    convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas};}
+    cpag:s.cpag,convagd:s.convagd,vendas:s.vendas,cac:s.cac,fat:s.fat,roas:s.roas};}
   const Sc=metaScope('C'), Sa=metaScope('A'), Sd=metaScope('D');
-  const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp'), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset'), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad');
+  const aggC=buildAgg(Sc.fL,Sc.fM,Sc.fS,'camp',Sc.fAg), aggA=buildAgg(Sa.fL,Sa.fM,Sa.fS,'adset',Sa.fAg), aggD=buildAgg(Sd.fL,Sd.fM,Sd.fS,'ad',Sd.fAg);
   // Tabelas hierárquicas: NÃO usam "fit" — a dimensão (campanha/conjunto/anúncio)
   // tem largura automática p/ caber o nome INTEIRO por padrão, nunca quebra linha,
   // é redimensionável (arrastar borda) e 2 cliques na borda auto-ajusta (Sheets/Looker).
